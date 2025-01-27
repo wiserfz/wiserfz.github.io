@@ -1,0 +1,3 @@
+User-agent: *
+Disallow:
+Sitemap: https://wiserfz.github.io/sitemap.xml
