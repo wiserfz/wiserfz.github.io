@@ -1,0 +1,245 @@
+<!doctype html><html class="dark light" lang=en><head><meta charset=UTF-8><meta content="IE=edge" http-equiv=X-UA-Compatible><meta content="width=device-width,initial-scale=1.0" name=viewport><meta content=https://wiserfz.github.io name=base><title>
+            
+                etcd auth
+            
+        </title><meta content="etcd auth" property=og:title><meta content="Enable etcd authentication." property=og:description><meta content="Enable etcd authentication." name=description><link href=https://wiserfz.github.io/img/favicons/favicon.ico rel=icon type=image/png><link href=https://wiserfz.github.io/fonts.css rel=stylesheet><script defer src=https://wiserfz.github.io/js/codeblock.js></script><script defer src=https://wiserfz.github.io/js/toc.js></script><script>MathJax = {
+                    tex: {
+                        inlineMath: [
+                            ['$', '$'],
+                            ['\\(', '\\)']
+                        ]
+                    }
+                };</script><script async id=MathJax-script src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/atom.xml rel=alternate type=application/atom+xml><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/rss.xml rel=alternate type=application/rss+xml><link href=https://wiserfz.github.io/theme/light.css rel=stylesheet><link href=https://wiserfz.github.io/theme/dark.css id=darkModeStyle rel=stylesheet><script src=https://wiserfz.github.io/js/themetoggle.js></script><script>setTheme(getSavedTheme());</script><link href=https://wiserfz.github.io/main.css media=screen rel=stylesheet><script src="https://wiserfz.github.io/search_index.en.js?h=83f808dfc552363cb1ef" defer></script><script src="https://wiserfz.github.io/js/searchElasticlunr.min.js?h=3626c0ef99daa745b31e" defer></script><body><div class=left-content></div><div class=content><nav><div class=left-nav><a href=https://wiserfz.github.io>wiser's blog</a><div class=socials><a rel="'me" target="'_blank'" class=social href=https://wiserfz.github.io/rss.xml noopener&#x27;> <img alt=rss src=https://wiserfz.github.io/icons/social/rss.svg> </a><a rel="'me" target="'_blank'" class=social href=mailto:wiserfz810@gmail.com noopener&#x27;> <img alt=email src=https://wiserfz.github.io/icons/social/email.svg> </a><a rel="'me" target="'_blank'" class=social href=https://github.com/wiserfz/ noopener&#x27;> <img alt=github src=https://wiserfz.github.io/icons/social/github.svg> </a></div></div><div class=right-nav><a href=https://wiserfz.github.io style=margin-right:.5em>/home</a><a href=https://wiserfz.github.io/posts style=margin-right:.5em>/posts</a><a href=https://wiserfz.github.io/tags style=margin-right:.5em>/tags</a><a href=https://wiserfz.github.io/about style=margin-right:.5em>/about</a><button title="$SHORTCUT to open search" class=search-button id=search-button><img alt=Search class=search-icon src=https://wiserfz.github.io/icons/search.svg></button><div class="search-modal js" aria-labelledby=modalTitle id=searchModal role=dialog><div id=modal-content><h1 class=page-header id=modalTitle>Search</h1><div id=searchBar><input aria-controls=results-container aria-expanded=false autocomplete=off id=searchInput placeholder=Search... role=combobox spellcheck=false><button title="Clear search" class=clear-button id=clear-search><svg viewbox="0 -960 960 960" xmlns=http://www.w3.org/2000/svg><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg></button></div><div id=results-container><div id=results-info><span id=zero_results style=display:none>No results</span><span id=one_result style=display:none>1 result</span><span id=many_results style=display:none>$NUMBER results</span></div><div id=results role=listbox></div></div></div></div><a onclick="toggleTheme(); event.preventDefault();" href=# id=dark-mode-toggle> <img alt=Light id=sun-icon src=https://wiserfz.github.io/icons/sun.svg style=filter:invert()> <img alt=Dark id=moon-icon src=https://wiserfz.github.io/icons/moon.svg> </a><script>updateItemToggleTheme()</script></div></nav><div data-selector="main article p" class=visible-element-observer-root><main><article><div class=title><div class=page-header>etcd auth</div><div class=meta>Posted on <time>2025-02-06</time><span class=tags-label>::</span><span class=tags> <a class=post-tag href=https://wiserfz.github.io/tags/etcd/>etcd</a> <a class=post-tag href=https://wiserfz.github.io/tags/code/>code</a> </span></div></div><section class=body><h1 id=overview><a aria-label="Anchor link for: overview" class=zola-anchor href=#overview>Overview</a></h1><p>由于安全要求，etcd 需要开启 authentication，因此；记录以下如何在不停服务的情况下开启 etcd authentication。<p>由于 etcd 3.5 更改了 auth 相关的 WAL entries，因此；如果在 etcd 3.4 下开启 authentication 则后续无法升级到 etcd 3.5。见 <a href=https://etcd.io/docs/v3.5/upgrades/upgrade_3_5/#upgrade-checklists rel=noopener target=_blank>etcd upgrade 3.5</a>，因此；需要先把 etcd 升级到 3.5 之后在开启 authentication。<h2 id=operations><a aria-label="Anchor link for: operations" class=zola-anchor href=#operations>Operations</a></h2><h3 id=step-1><a aria-label="Anchor link for: step-1" class=zola-anchor href=#step-1>Step 1</a></h3><p>创建 root 用户以及 root role<pre class=language-bash data-lang=bash style=color:#c0c5ce;background-color:#2b303b><code class=language-bash data-lang=bash><span style=color:#65737e># there is one special user, root, and one special role, root
+</span><span style=color:#bf616a>etcdctl</span><span> user add root:password
+</span><span style=color:#bf616a>etcdctl</span><span> role add root
+</span><span>
+</span><span style=color:#bf616a>etcdctl</span><span> user grant-role root root
+</span></code></pre><h3 id=step-2><a aria-label="Anchor link for: step-2" class=zola-anchor href=#step-2>Step 2</a></h3><p>根据目前所有的 key 的使用情况，创建 roles。这些 roles 用来给不同的 user 授权。有的应用需要 readwrite，有的是 read，有的是 write。<pre class=language-bash data-lang=bash style=color:#c0c5ce;background-color:#2b303b><code class=language-bash data-lang=bash><span style=color:#65737e># add other roles by root user if authentication is enabled need pass &lt;--user root:password> flag
+</span><span style=color:#bf616a>etcdctl</span><span> role add role1
+</span><span style=color:#65737e># and grant permission for other roles
+</span><span style=color:#bf616a>etcdctl</span><span> role grant-permission</span><span style=color:#bf616a> --prefix</span><span>=true role1 read /xxx/
+</span></code></pre><h3 id=step-3><a aria-label="Anchor link for: step-3" class=zola-anchor href=#step-3>Step 3</a></h3><p>给每个应用创建并分发 user:password，并更新到应用进程中（动态更新或重启）。<pre class=language-bash data-lang=bash style=color:#c0c5ce;background-color:#2b303b><code class=language-bash data-lang=bash><span style=color:#65737e># create other user if authentication is enabled need pass --user flag
+</span><span style=color:#bf616a>etcdctl</span><span> user add user1:password
+</span><span>
+</span><span style=color:#65737e># grant role for user
+</span><span style=color:#bf616a>etcdctl</span><span> user grant-role user1 role1
+</span></code></pre><h3 id=step-4><a aria-label="Anchor link for: step-4" class=zola-anchor href=#step-4>Step 4</a></h3><p>所有应用都已经使用 user:password 并准备好后，etcd 集群启用 authentication。<pre class=language-bash data-lang=bash style=color:#c0c5ce;background-color:#2b303b><code class=language-bash data-lang=bash><span style=color:#bf616a>etcdctl</span><span> auth enable
+</span></code></pre><h2 id=analyzation><a aria-label="Anchor link for: analyzation" class=zola-anchor href=#analyzation>Analyzation</a></h2><p>通常 etcd client 实现会实现配置传递 endpoints，username，password 等配置。在启用 Authenticatioin 的情况下，会成功返回 AuthenticateResponse 并带上可用的 token。在 client 中会使用这个 token 另外建立一个 TCP 连接，来请求 etcd server，见<a href=https://etcd.io/docs/v3.5/learning/design-auth-v3/#authentication rel=noopener target=_blank>etcd v3 authentication design</a>。<h3 id=go-etcd-client><a aria-label="Anchor link for: go-etcd-client" class=zola-anchor href=#go-etcd-client>Go etcd client</a></h3><p>在 <a href=https://github.com/etcd-io/etcd rel=noopener target=_blank>etcd</a> 仓库中，有 go 的 etcd client 实现，那么 etcd go 是如何实现 credentials 的。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span style=color:#8fa1b3>newClient</span><span>(</span><span style=color:#bf616a>cfg </span><span>*</span><span style=color:#b48ead>Config</span><span>) (*</span><span style=color:#b48ead>Client</span><span>, </span><span style=color:#b48ead>error</span><span>) {
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>Username </span><span>!= "" && </span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>Password </span><span>!= "" {
+</span><span>		</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>Username </span><span>= </span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>Username
+</span><span>		</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>Password </span><span>= </span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>Password
+</span><span>		</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>authTokenBundle </span><span>= </span><span style=color:#bf616a>credentials</span><span>.</span><span style=color:#bf616a>NewPerRPCCredentialBundle</span><span>()
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#65737e>// Use a provided endpoint target so that for https:// without any tls config given, then
+</span><span>	</span><span style=color:#65737e>// grpc will assume the certificate server name is the endpoint host.
+</span><span>	</span><span style=color:#bf616a>conn</span><span>, </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>dialWithBalancer</span><span>()
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>cancel</span><span>()
+</span><span>		</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>resolver</span><span>.</span><span style=color:#bf616a>Close</span><span>()
+</span><span>		</span><span style=color:#65737e>// TODO: Error like `fmt.Errorf(dialing [%s] failed: %v, strings.Join(cfg.Endpoints, ";"), err)` would help with debugging a lot.
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>conn </span><span>= </span><span style=color:#bf616a>conn
+</span><span>
+</span><span>	</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>Cluster </span><span>= </span><span style=color:#bf616a>NewCluster</span><span>(</span><span style=color:#bf616a>client</span><span>)
+</span><span>	</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>KV </span><span>= </span><span style=color:#bf616a>NewKV</span><span>(</span><span style=color:#bf616a>client</span><span>)
+</span><span>	</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>Lease </span><span>= </span><span style=color:#bf616a>NewLease</span><span>(</span><span style=color:#bf616a>client</span><span>)
+</span><span>	</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>Watcher </span><span>= </span><span style=color:#bf616a>NewWatcher</span><span>(</span><span style=color:#bf616a>client</span><span>)
+</span><span>	</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>Auth </span><span>= </span><span style=color:#bf616a>NewAuth</span><span>(</span><span style=color:#bf616a>client</span><span>)
+</span><span>	</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>Maintenance </span><span>= </span><span style=color:#bf616a>NewMaintenance</span><span>(</span><span style=color:#bf616a>client</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#65737e>// get token with established connection
+</span><span>	</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>cancel </span><span>= </span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#b48ead>func</span><span>() {}
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>DialTimeout </span><span>> </span><span style=color:#d08770>0 </span><span>{
+</span><span>		</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>cancel </span><span>= </span><span style=color:#bf616a>context</span><span>.</span><span style=color:#bf616a>WithTimeout</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>DialTimeout</span><span>)
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>err </span><span>= </span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>getToken</span><span>(</span><span style=color:#bf616a>ctx</span><span>)
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>Close</span><span>()
+</span><span>		</span><span style=color:#bf616a>cancel</span><span>()
+</span><span>		</span><span style=color:#65737e>// TODO: Consider fmt.Errorf("communicating with [%s] failed: %v", strings.Join(cfg.Endpoints, ";"), err)
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>cancel</span><span>()
+</span><span>
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>RejectOldCluster </span><span>{
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>checkVersion</span><span>(); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>Close</span><span>()
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>err
+</span><span>		}
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#b48ead>go </span><span style=color:#bf616a>client</span><span>.</span><span style=color:#bf616a>autoSync</span><span>()
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>client</span><span>, </span><span style=color:#d08770>nil
+</span><span>
+</span><span>}
+</span></code></pre><p>设置 <code>client.authTokenBundle</code> 为 <code>client/v3/credentials.perRPCCredentialBundle</code>，其中 <code>perRPCCredential</code> 实现 <code>grpc-go</code> 库中的 <code>grpc/credentials.PerRPCCredentials</code> 接口；然后，通过 <code>client.getToken</code> 方法通过 <code>Authenticate</code> 方法请求 etcd 获取 token 并设置到 <code>client.authTokenBundle</code> 中，这样请求就可以通过 <code>grpc/credentials.PerRPCCredentials</code> 接口获取到 Token。<p>go etcd client 利用 <code>grpc-go</code> 中的 Interceptor 机制设置了 unary interceptor 以及 stream interceptor。通过 <code>client.dialWithBalancer</code> 方法调用 <code>client.dial</code> 方法以及 <code>client.dialSetupOpts</code> 方法。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>c </span><span>*</span><span style=color:#b48ead>Client</span><span>) </span><span style=color:#8fa1b3>dialSetupOpts</span><span>(</span><span style=color:#bf616a>creds grpccredentials</span><span>.</span><span style=color:#b48ead>TransportCredentials</span><span>, </span><span style=color:#bf616a>dopts </span><span>...</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>DialOption</span><span>) []</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>DialOption </span><span>{
+</span><span>	</span><span style=color:#b48ead>var </span><span style=color:#bf616a>opts </span><span>[]</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>DialOption
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#65737e>// Interceptor retry and backoff.
+</span><span>	</span><span style=color:#65737e>// TODO: Replace all of clientv3/retry.go with RetryPolicy:
+</span><span>	</span><span style=color:#65737e>// https://github.com/grpc/grpc-proto/blob/cdd9ed5c3d3f87aef62f373b93361cf7bddc620d/grpc/service_config/service_config.proto#L130
+</span><span>	</span><span style=color:#bf616a>rrBackoff </span><span>:= </span><span style=color:#bf616a>withBackoff</span><span>(</span><span style=color:#bf616a>c</span><span>.</span><span style=color:#bf616a>roundRobinQuorumBackoff</span><span>(</span><span style=color:#bf616a>backoffWaitBetween</span><span>, </span><span style=color:#bf616a>backoffJitterFraction</span><span>))
+</span><span>	</span><span style=color:#bf616a>opts </span><span>= </span><span style=color:#96b5b4>append</span><span>(</span><span style=color:#bf616a>opts</span><span>,
+</span><span>		</span><span style=color:#65737e>// Disable stream retry by default since go-grpc-middleware/retry does not support client streams.
+</span><span>		</span><span style=color:#65737e>// Streams that are safe to retry are enabled individually.
+</span><span>		</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#bf616a>WithStreamInterceptor</span><span>(</span><span style=color:#bf616a>c</span><span>.</span><span style=color:#bf616a>streamClientInterceptor</span><span>(</span><span style=color:#bf616a>withMax</span><span>(</span><span style=color:#d08770>0</span><span>), </span><span style=color:#bf616a>rrBackoff</span><span>)),
+</span><span>		</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#bf616a>WithUnaryInterceptor</span><span>(</span><span style=color:#bf616a>c</span><span>.</span><span style=color:#bf616a>unaryClientInterceptor</span><span>(</span><span style=color:#bf616a>withMax</span><span>(</span><span style=color:#bf616a>unaryMaxRetries</span><span>), </span><span style=color:#bf616a>rrBackoff</span><span>)),
+</span><span>	)
+</span><span>
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>opts
+</span><span>}
+</span></code></pre><p><strong>gRPC stream request 是没有 retry 策略的，但是 gRPC unary request 是有 backoff retry 策略。</strong><pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>c </span><span>*</span><span style=color:#b48ead>Client</span><span>) </span><span style=color:#8fa1b3>streamClientInterceptor</span><span>(</span><span style=color:#bf616a>optFuncs </span><span>...</span><span style=color:#b48ead>retryOption</span><span>) </span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>StreamClientInterceptor </span><span>{
+</span><span>	</span><span style=color:#bf616a>intOpts </span><span>:= </span><span style=color:#bf616a>reuseOrNewWithCallOptions</span><span>(</span><span style=color:#bf616a>defaultOptions</span><span>, </span><span style=color:#bf616a>optFuncs</span><span>)
+</span><span>	</span><span style=color:#b48ead>return func</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>desc </span><span>*</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>StreamDesc</span><span>, </span><span style=color:#bf616a>cc </span><span>*</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>ClientConn</span><span>, </span><span style=color:#bf616a>method </span><span style=color:#b48ead>string</span><span>, </span><span style=color:#bf616a>streamer grpc</span><span>.</span><span style=color:#b48ead>Streamer</span><span>, </span><span style=color:#bf616a>opts </span><span>...</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>CallOption</span><span>) (</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>ClientStream</span><span>, </span><span style=color:#b48ead>error</span><span>) {
+</span><span>		</span><span style=color:#bf616a>ctx </span><span>= </span><span style=color:#bf616a>withVersion</span><span>(</span><span style=color:#bf616a>ctx</span><span>)
+</span><span>		</span><span style=color:#65737e>// getToken automatically. Otherwise, auth token may be invalid after watch reconnection because the token has expired
+</span><span>		</span><span style=color:#65737e>// (see https://github.com/etcd-io/etcd/issues/11954 for more).
+</span><span>		</span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>c</span><span>.</span><span style=color:#bf616a>getToken</span><span>(</span><span style=color:#bf616a>ctx</span><span>)
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#bf616a>c</span><span>.</span><span style=color:#bf616a>GetLogger</span><span>().</span><span style=color:#bf616a>Error</span><span>("</span><span style=color:#a3be8c>clientv3/retry_interceptor: getToken failed</span><span>", </span><span style=color:#bf616a>zap</span><span>.</span><span style=color:#bf616a>Error</span><span>(</span><span style=color:#bf616a>err</span><span>))
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>err
+</span><span>		}
+</span><span>		</span><span style=color:#bf616a>grpcOpts</span><span>, </span><span style=color:#bf616a>retryOpts </span><span>:= </span><span style=color:#bf616a>filterCallOptions</span><span>(</span><span style=color:#bf616a>opts</span><span>)
+</span><span>		</span><span style=color:#bf616a>callOpts </span><span>:= </span><span style=color:#bf616a>reuseOrNewWithCallOptions</span><span>(</span><span style=color:#bf616a>intOpts</span><span>, </span><span style=color:#bf616a>retryOpts</span><span>)
+</span><span>		</span><span style=color:#65737e>// short circuit for simplicity, and avoiding allocations.
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>callOpts</span><span>.</span><span style=color:#bf616a>max </span><span>== </span><span style=color:#d08770>0 </span><span>{
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#bf616a>streamer</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>desc</span><span>, </span><span style=color:#bf616a>cc</span><span>, </span><span style=color:#bf616a>method</span><span>, </span><span style=color:#bf616a>grpcOpts</span><span>...)
+</span><span>		}
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>desc</span><span>.</span><span style=color:#bf616a>ClientStreams </span><span>{
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>status</span><span>.</span><span style=color:#bf616a>Errorf</span><span>(</span><span style=color:#bf616a>codes</span><span>.</span><span style=color:#bf616a>Unimplemented</span><span>, "</span><span style=color:#a3be8c>clientv3/retry_interceptor: cannot retry on ClientStreams, set Disable()</span><span>")
+</span><span>		}
+</span><span>		</span><span style=color:#bf616a>newStreamer</span><span>, </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>streamer</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>desc</span><span>, </span><span style=color:#bf616a>cc</span><span>, </span><span style=color:#bf616a>method</span><span>, </span><span style=color:#bf616a>grpcOpts</span><span>...)
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#bf616a>c</span><span>.</span><span style=color:#bf616a>GetLogger</span><span>().</span><span style=color:#bf616a>Error</span><span>("</span><span style=color:#a3be8c>streamer failed to create ClientStream</span><span>", </span><span style=color:#bf616a>zap</span><span>.</span><span style=color:#bf616a>Error</span><span>(</span><span style=color:#bf616a>err</span><span>))
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>err </span><span style=color:#65737e>// TODO(mwitkow): Maybe dial and transport errors should be retriable?
+</span><span>		}
+</span><span>		</span><span style=color:#bf616a>retryingStreamer </span><span>:= &</span><span style=color:#bf616a>serverStreamingRetryingStream</span><span>{
+</span><span>			</span><span style=color:#bf616a>client</span><span>:       </span><span style=color:#bf616a>c</span><span>,
+</span><span>			</span><span style=color:#bf616a>ClientStream</span><span>: </span><span style=color:#bf616a>newStreamer</span><span>,
+</span><span>			</span><span style=color:#bf616a>callOpts</span><span>:     </span><span style=color:#bf616a>callOpts</span><span>,
+</span><span>			</span><span style=color:#bf616a>ctx</span><span>:          </span><span style=color:#bf616a>ctx</span><span>,
+</span><span>			</span><span style=color:#bf616a>streamerCall</span><span>: </span><span style=color:#b48ead>func</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>) (</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>ClientStream</span><span>, </span><span style=color:#b48ead>error</span><span>) {
+</span><span>				</span><span style=color:#b48ead>return </span><span style=color:#bf616a>streamer</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>desc</span><span>, </span><span style=color:#bf616a>cc</span><span>, </span><span style=color:#bf616a>method</span><span>, </span><span style=color:#bf616a>grpcOpts</span><span>...)
+</span><span>			},
+</span><span>		}
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>retryingStreamer</span><span>, </span><span style=color:#d08770>nil
+</span><span>	}
+</span><span>}
+</span></code></pre><p>设置了 <code>streamClientInterceptor</code> 后，每一次 stream request 都会重新获取一次 auth token，防止 token 过期。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>c </span><span>*</span><span style=color:#b48ead>Client</span><span>) </span><span style=color:#8fa1b3>unaryClientInterceptor</span><span>(</span><span style=color:#bf616a>optFuncs </span><span>...</span><span style=color:#b48ead>retryOption</span><span>) </span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>UnaryClientInterceptor </span><span>{
+</span><span>	</span><span style=color:#bf616a>intOpts </span><span>:= </span><span style=color:#bf616a>reuseOrNewWithCallOptions</span><span>(</span><span style=color:#bf616a>defaultOptions</span><span>, </span><span style=color:#bf616a>optFuncs</span><span>)
+</span><span>	</span><span style=color:#b48ead>return func</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>method </span><span style=color:#b48ead>string</span><span>, </span><span style=color:#bf616a>req</span><span>, </span><span style=color:#bf616a>reply </span><span style=color:#b48ead>any</span><span>, </span><span style=color:#bf616a>cc </span><span>*</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>ClientConn</span><span>, </span><span style=color:#bf616a>invoker grpc</span><span>.</span><span style=color:#b48ead>UnaryInvoker</span><span>, </span><span style=color:#bf616a>opts </span><span>...</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>CallOption</span><span>) </span><span style=color:#b48ead>error </span><span>{
+</span><span>		</span><span style=color:#bf616a>ctx </span><span>= </span><span style=color:#bf616a>withVersion</span><span>(</span><span style=color:#bf616a>ctx</span><span>)
+</span><span>		</span><span style=color:#bf616a>grpcOpts</span><span>, </span><span style=color:#bf616a>retryOpts </span><span>:= </span><span style=color:#bf616a>filterCallOptions</span><span>(</span><span style=color:#bf616a>opts</span><span>)
+</span><span>		</span><span style=color:#bf616a>callOpts </span><span>:= </span><span style=color:#bf616a>reuseOrNewWithCallOptions</span><span>(</span><span style=color:#bf616a>intOpts</span><span>, </span><span style=color:#bf616a>retryOpts</span><span>)
+</span><span>		</span><span style=color:#65737e>// short circuit for simplicity, and avoiding allocations.
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>callOpts</span><span>.</span><span style=color:#bf616a>max </span><span>== </span><span style=color:#d08770>0 </span><span>{
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#bf616a>invoker</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>method</span><span>, </span><span style=color:#bf616a>req</span><span>, </span><span style=color:#bf616a>reply</span><span>, </span><span style=color:#bf616a>cc</span><span>, </span><span style=color:#bf616a>grpcOpts</span><span>...)
+</span><span>		}
+</span><span>		</span><span style=color:#b48ead>var </span><span style=color:#bf616a>lastErr </span><span style=color:#b48ead>error
+</span><span>		</span><span style=color:#b48ead>for </span><span style=color:#bf616a>attempt </span><span>:= </span><span style=color:#bf616a>uint</span><span>(</span><span style=color:#d08770>0</span><span>); </span><span style=color:#bf616a>attempt </span><span>&lt; </span><span style=color:#bf616a>callOpts</span><span>.</span><span style=color:#bf616a>max</span><span>; </span><span style=color:#bf616a>attempt</span><span>++ {
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>waitRetryBackoff</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>attempt</span><span>, </span><span style=color:#bf616a>callOpts</span><span>); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>				</span><span style=color:#b48ead>return </span><span style=color:#bf616a>err
+</span><span>			}
+</span><span>
+</span><span>			</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>			</span><span style=color:#bf616a>lastErr </span><span>= </span><span style=color:#bf616a>invoker</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>method</span><span>, </span><span style=color:#bf616a>req</span><span>, </span><span style=color:#bf616a>reply</span><span>, </span><span style=color:#bf616a>cc</span><span>, </span><span style=color:#bf616a>grpcOpts</span><span>...)
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>lastErr </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>				</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>			}
+</span><span>
+</span><span>			</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>isContextError</span><span>(</span><span style=color:#bf616a>lastErr</span><span>) {
+</span><span>				</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ctx</span><span>.</span><span style=color:#bf616a>Err</span><span>() != </span><span style=color:#d08770>nil </span><span>{
+</span><span>					</span><span style=color:#65737e>// its the context deadline or cancellation.
+</span><span>					</span><span style=color:#b48ead>return </span><span style=color:#bf616a>lastErr
+</span><span>				}
+</span><span>				</span><span style=color:#65737e>// its the callCtx deadline or cancellation, in which case try again.
+</span><span>				</span><span style=color:#b48ead>continue
+</span><span>			}
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>c</span><span>.</span><span style=color:#bf616a>shouldRefreshToken</span><span>(</span><span style=color:#bf616a>lastErr</span><span>, </span><span style=color:#bf616a>callOpts</span><span>) {
+</span><span>				</span><span style=color:#bf616a>gtErr </span><span>:= </span><span style=color:#bf616a>c</span><span>.</span><span style=color:#bf616a>refreshToken</span><span>(</span><span style=color:#bf616a>ctx</span><span>)
+</span><span>				</span><span style=color:#b48ead>if </span><span style=color:#bf616a>gtErr </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>					</span><span style=color:#bf616a>c</span><span>.</span><span style=color:#bf616a>GetLogger</span><span>().</span><span style=color:#bf616a>Warn</span><span>(
+</span><span>						"</span><span style=color:#a3be8c>retrying of unary invoker failed to fetch new auth token</span><span>",
+</span><span>						</span><span style=color:#bf616a>zap</span><span>.</span><span style=color:#bf616a>String</span><span>("</span><span style=color:#a3be8c>target</span><span>", </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>Target</span><span>()),
+</span><span>						</span><span style=color:#bf616a>zap</span><span>.</span><span style=color:#bf616a>Error</span><span>(</span><span style=color:#bf616a>gtErr</span><span>),
+</span><span>					)
+</span><span>					</span><span style=color:#b48ead>return </span><span style=color:#bf616a>gtErr </span><span style=color:#65737e>// lastErr must be invalid auth token
+</span><span>				}
+</span><span>				</span><span style=color:#b48ead>continue
+</span><span>			}
+</span><span>			</span><span style=color:#b48ead>if </span><span>!</span><span style=color:#bf616a>isSafeRetry</span><span>(</span><span style=color:#bf616a>c</span><span>, </span><span style=color:#bf616a>lastErr</span><span>, </span><span style=color:#bf616a>callOpts</span><span>) {
+</span><span>				</span><span style=color:#b48ead>return </span><span style=color:#bf616a>lastErr
+</span><span>			}
+</span><span>		}
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>lastErr
+</span><span>	}
+</span><span>}
+</span></code></pre><p>而 <code>unaryClientInterceptor</code> 则是通过 retry 策略判断上一次请求的错误判断是否更新 token。<ul><li>如果错误是 <code>ErrUserEmpty</code>，则当 <code>client.authTokenBundle</code> 不为 nil 时即设置了 username 以及 password，则重新获取 token<li>如果错误是 <code>ErrInvalidAuthToken</code> 或者 <code>ErrAuthOldRevision</code> 时，且设置了 <code>retryAuth</code> flag，则重新获取 token</ul><h2 id=auth-token-ttl><a aria-label="Anchor link for: auth-token-ttl" class=zola-anchor href=#auth-token-ttl>Auth token ttl</a></h2><p>etcd 默认 auth token 是 simple 并且有过期时间，通过 <code>--auth-token-ttl</code> 设置，默认为 300s；它的机制是在 token 没有过期的时间内，建立的 stream 都可以正常的读写数据，但是；当 token 过期，在使用过期的 token 建立的 stream 是无法正常使用的。由于 go 的 etcd client 利用 gRPC interceptor 机制解决了在建立新的 stream 时刷新 token 的问题，因此这里使用 rust 的 <a href=https://docs.rs/etcd-client/latest/etcd_client/index.html rel=noopener target=_blank>etcd-client</a> 来复现这个问题，设置 etcd <code>auth-token-ttl=5</code>；<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span>#[</span><span style=color:#bf616a>tokio</span><span>::</span><span style=color:#bf616a>main</span><span>]
+</span><span>async </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>main</span><span>() {
+</span><span>    </span><span style=color:#b48ead>let</span><span> shutdown = </span><span style=color:#96b5b4>handle_signals</span><span>();
+</span><span>    tokio::pin!(shutdown);
+</span><span>
+</span><span>    </span><span style=color:#b48ead>let</span><span> endpoints = "</span><span style=color:#a3be8c>http://127.0.0.1:12379,http://127.0.0.1:22379,http://127.0.0.1:32379</span><span>";
+</span><span>    </span><span style=color:#b48ead>let</span><span> endpoints: Vec&lt;_> = endpoints.</span><span style=color:#96b5b4>split</span><span>('</span><span style=color:#a3be8c>,</span><span>').</span><span style=color:#96b5b4>map</span><span>(|</span><span style=color:#bf616a>addr</span><span>| addr.</span><span style=color:#96b5b4>trim</span><span>()).</span><span style=color:#96b5b4>collect</span><span>();
+</span><span>    </span><span style=color:#b48ead>let</span><span> opts = etcd_client::ConnectOptions::new().</span><span style=color:#96b5b4>with_user</span><span>("</span><span style=color:#a3be8c>user1</span><span>", "</span><span style=color:#a3be8c>test</span><span>");
+</span><span>
+</span><span>    </span><span style=color:#b48ead>let mut</span><span> client = Client::connect(endpoints, Some(opts)).await.</span><span style=color:#96b5b4>unwrap</span><span>();
+</span><span>    </span><span style=color:#b48ead>let</span><span> opt = WatchOptions::new().</span><span style=color:#96b5b4>with_prefix</span><span>();
+</span><span>
+</span><span>    </span><span style=color:#b48ead>let</span><span> sleep = tokio::time::sleep(Duration::from_secs(</span><span style=color:#d08770>30</span><span>));
+</span><span>    tokio::pin!(sleep);
+</span><span>
+</span><span>    'a: </span><span style=color:#b48ead>loop </span><span>{
+</span><span>        </span><span style=color:#65737e>// client
+</span><span>        </span><span style=color:#65737e>//     .auth_client()
+</span><span>        </span><span style=color:#65737e>//     .set_client_auth("user1".to_string(), "test".to_string())
+</span><span>        </span><span style=color:#65737e>//     .await
+</span><span>        </span><span style=color:#65737e>//     .unwrap();
+</span><span>        </span><span style=color:#65737e>// println!("set client auth success");
+</span><span>
+</span><span>        </span><span style=color:#b48ead>let </span><span>(</span><span style=color:#b48ead>mut</span><span> watcher, </span><span style=color:#b48ead>mut</span><span> stream) = client
+</span><span>            .</span><span style=color:#96b5b4>watch</span><span>("</span><span style=color:#a3be8c>/registry/foo</span><span>", Some(opt.</span><span style=color:#96b5b4>clone</span><span>()))
+</span><span>            .await
+</span><span>            .</span><span style=color:#96b5b4>unwrap</span><span>();
+</span><span>
+</span><span>        </span><span style=color:#b48ead>loop </span><span>{
+</span><span>            println!("</span><span style=color:#a3be8c>start watch loop =======</span><span>");
+</span><span>            tokio::select! {
+</span><span>                _ = &</span><span style=color:#b48ead>mut</span><span> shutdown => {
+</span><span>                    println!("</span><span style=color:#a3be8c>shutdown signal received</span><span>");
+</span><span>                    </span><span style=color:#b48ead>break 'a</span><span>;
+</span><span>                }
+</span><span>
+</span><span>                _ = &</span><span style=color:#b48ead>mut</span><span> sleep => {
+</span><span>                    println!("</span><span style=color:#a3be8c>sleep timeout</span><span>");
+</span><span>                    watcher.</span><span style=color:#96b5b4>cancel</span><span>().await.</span><span style=color:#96b5b4>unwrap</span><span>();
+</span><span>                    sleep.</span><span style=color:#96b5b4>as_mut</span><span>().</span><span style=color:#96b5b4>reset</span><span>(Instant::now() + Duration::from_secs(</span><span style=color:#d08770>300</span><span>));
+</span><span>                    </span><span style=color:#b48ead>continue 'a</span><span>;
+</span><span>                }
+</span><span>
+</span><span>                res = stream.</span><span style=color:#96b5b4>message</span><span>() => {
+</span><span>                    </span><span style=color:#b48ead>let</span><span> resp = res.</span><span style=color:#96b5b4>inspect_err</span><span>(|</span><span style=color:#bf616a>err</span><span>| println!("</span><span style=color:#a3be8c>watch response error: </span><span style=color:#d08770>{}</span><span>", err)).</span><span style=color:#96b5b4>unwrap</span><span>()
+</span><span>                        .</span><span style=color:#96b5b4>ok_or_else</span><span>(|| println!("</span><span style=color:#a3be8c>Channel of etcd watch response closed</span><span>")).</span><span style=color:#96b5b4>unwrap</span><span>();
+</span><span>
+</span><span>                    println!("</span><span style=color:#a3be8c>watch resp: </span><span style=color:#d08770>{:?}</span><span>", resp);
+</span><span>                }
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre><p>在刚开始的 30s 内是可以正常接收到 watch response 的，因为 watch stream 是在 token 没有过期的时间内设置的，但是；当 30s 过后，由于 token 过期，在建立的 stream 是非法的，无法接收 watch response。<h3 id=fix><a aria-label="Anchor link for: fix" class=zola-anchor href=#fix>Fix</a></h3><p>每次建立新的 watch stream 时，需要重新设置 auth token，即把注释的代码打开即可。</section></article></main></div></div><div class=right-content><div class=toc><div class=heading>Table of Contents</div><ul class=toc-list><li class=parent><a href=https://wiserfz.github.io/posts/etcd-auth/#overview>Overview</a> <ul><li><a href=https://wiserfz.github.io/posts/etcd-auth/#operations>Operations</a></li><ul><li><a href=https://wiserfz.github.io/posts/etcd-auth/#step-1>Step 1</a><li><a href=https://wiserfz.github.io/posts/etcd-auth/#step-2>Step 2</a><li><a href=https://wiserfz.github.io/posts/etcd-auth/#step-3>Step 3</a><li><a href=https://wiserfz.github.io/posts/etcd-auth/#step-4>Step 4</a></ul><li><a href=https://wiserfz.github.io/posts/etcd-auth/#analyzation>Analyzation</a></li><ul><li><a href=https://wiserfz.github.io/posts/etcd-auth/#go-etcd-client>Go etcd client</a></ul><li><a href=https://wiserfz.github.io/posts/etcd-auth/#auth-token-ttl>Auth token ttl</a></li><ul><li><a href=https://wiserfz.github.io/posts/etcd-auth/#fix>Fix</a></ul></ul></ul></div></div>

@@ -1,0 +1,421 @@
+<!doctype html><html class="dark light" lang=en><head><meta charset=UTF-8><meta content="IE=edge" http-equiv=X-UA-Compatible><meta content="width=device-width,initial-scale=1.0" name=viewport><meta content=https://wiserfz.github.io name=base><title>
+            
+                etcd watch
+            
+        </title><meta content="etcd watch" property=og:title><meta content="workflow of go client etcd watch." property=og:description><meta content="workflow of go client etcd watch." name=description><link href=https://wiserfz.github.io/img/favicons/favicon.ico rel=icon type=image/png><link href=https://wiserfz.github.io/fonts.css rel=stylesheet><script defer src=https://wiserfz.github.io/js/codeblock.js></script><script defer src=https://wiserfz.github.io/js/toc.js></script><script>MathJax = {
+                    tex: {
+                        inlineMath: [
+                            ['$', '$'],
+                            ['\\(', '\\)']
+                        ]
+                    }
+                };</script><script async id=MathJax-script src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/atom.xml rel=alternate type=application/atom+xml><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/rss.xml rel=alternate type=application/rss+xml><link href=https://wiserfz.github.io/theme/light.css rel=stylesheet><link href=https://wiserfz.github.io/theme/dark.css id=darkModeStyle rel=stylesheet><script src=https://wiserfz.github.io/js/themetoggle.js></script><script>setTheme(getSavedTheme());</script><link href=https://wiserfz.github.io/main.css media=screen rel=stylesheet><script src="https://wiserfz.github.io/search_index.en.js?h=83f808dfc552363cb1ef" defer></script><script src="https://wiserfz.github.io/js/searchElasticlunr.min.js?h=3626c0ef99daa745b31e" defer></script><body><div class=left-content></div><div class=content><nav><div class=left-nav><a href=https://wiserfz.github.io>wiser's blog</a><div class=socials><a rel="'me" target="'_blank'" class=social href=https://wiserfz.github.io/rss.xml noopener&#x27;> <img alt=rss src=https://wiserfz.github.io/icons/social/rss.svg> </a><a rel="'me" target="'_blank'" class=social href=mailto:wiserfz810@gmail.com noopener&#x27;> <img alt=email src=https://wiserfz.github.io/icons/social/email.svg> </a><a rel="'me" target="'_blank'" class=social href=https://github.com/wiserfz/ noopener&#x27;> <img alt=github src=https://wiserfz.github.io/icons/social/github.svg> </a></div></div><div class=right-nav><a href=https://wiserfz.github.io style=margin-right:.5em>/home</a><a href=https://wiserfz.github.io/posts style=margin-right:.5em>/posts</a><a href=https://wiserfz.github.io/tags style=margin-right:.5em>/tags</a><a href=https://wiserfz.github.io/about style=margin-right:.5em>/about</a><button title="$SHORTCUT to open search" class=search-button id=search-button><img alt=Search class=search-icon src=https://wiserfz.github.io/icons/search.svg></button><div class="search-modal js" aria-labelledby=modalTitle id=searchModal role=dialog><div id=modal-content><h1 class=page-header id=modalTitle>Search</h1><div id=searchBar><input aria-controls=results-container aria-expanded=false autocomplete=off id=searchInput placeholder=Search... role=combobox spellcheck=false><button title="Clear search" class=clear-button id=clear-search><svg viewbox="0 -960 960 960" xmlns=http://www.w3.org/2000/svg><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg></button></div><div id=results-container><div id=results-info><span id=zero_results style=display:none>No results</span><span id=one_result style=display:none>1 result</span><span id=many_results style=display:none>$NUMBER results</span></div><div id=results role=listbox></div></div></div></div><a onclick="toggleTheme(); event.preventDefault();" href=# id=dark-mode-toggle> <img alt=Light id=sun-icon src=https://wiserfz.github.io/icons/sun.svg style=filter:invert()> <img alt=Dark id=moon-icon src=https://wiserfz.github.io/icons/moon.svg> </a><script>updateItemToggleTheme()</script></div></nav><div data-selector="main article p" class=visible-element-observer-root><main><article><div class=title><div class=page-header>etcd watch</div><div class=meta>Posted on <time>2025-10-06</time><span class=tags-label>::</span><span class=tags> <a class=post-tag href=https://wiserfz.github.io/tags/etcd/>etcd</a> <a class=post-tag href=https://wiserfz.github.io/tags/code/>code</a> </span></div></div><section class=body><h1 id=qian-yan><a aria-label="Anchor link for: qian-yan" class=zola-anchor href=#qian-yan>前言</a></h1><p>该篇文章主要记录阅读 etcd clientv3 中 watch 机制的实现以及在开发过程中遇到的由于 watch 代码中错误逻辑的处理不完善，导致 watch event 丢失等问题，并记录如何解决。<p>主要会包括以下 2 个方面：<ol><li>etcd 客户端 watch 机制的实现<li>问题记录以及解决</ol><h1 id=etcd-client-watch><a aria-label="Anchor link for: etcd-client-watch" class=zola-anchor href=#etcd-client-watch>etcd client watch</a></h1><p><img alt="etcd client watch" src=/img/etcd-watch/etcd-client.png><p>当使用 go etcd client 连接 etcd 并创建 watch 请求时，首先会初始化 <code>Client</code> 结构体，在该结构体中包含配置，连接，鉴权信息以及 etcd 相关 API 的接口实现等结构。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>type </span><span>Client </span><span style=color:#b48ead>struct </span><span>{
+</span><span>	</span><span style=color:#a3be8c>Cluster
+</span><span>	</span><span style=color:#a3be8c>KV
+</span><span>	</span><span style=color:#a3be8c>Lease
+</span><span>	</span><span style=color:#a3be8c>Watcher
+</span><span>	</span><span style=color:#a3be8c>Auth
+</span><span>	</span><span style=color:#a3be8c>Maintenance
+</span><span>
+</span><span>	</span><span style=color:#bf616a>conn </span><span>*</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>ClientConn
+</span><span>
+</span><span>	</span><span style=color:#bf616a>cfg      </span><span style=color:#b48ead>Config
+</span><span>	</span><span style=color:#bf616a>creds    grpccredentials</span><span>.</span><span style=color:#b48ead>TransportCredentials
+</span><span>	</span><span style=color:#bf616a>resolver </span><span>*</span><span style=color:#bf616a>resolver</span><span>.</span><span style=color:#b48ead>EtcdManualResolver
+</span><span>	</span><span style=color:#bf616a>mu       </span><span>*</span><span style=color:#bf616a>sync</span><span>.</span><span style=color:#b48ead>RWMutex
+</span><span>
+</span><span>	</span><span style=color:#bf616a>ctx    context</span><span>.</span><span style=color:#b48ead>Context
+</span><span>	</span><span style=color:#bf616a>cancel context</span><span>.</span><span style=color:#b48ead>CancelFunc
+</span><span>
+</span><span>	</span><span style=color:#65737e>// Username is a user name for authentication.
+</span><span>	</span><span style=color:#bf616a>Username </span><span style=color:#b48ead>string
+</span><span>	</span><span style=color:#65737e>// Password is a password for authentication.
+</span><span>	</span><span style=color:#bf616a>Password        </span><span style=color:#b48ead>string
+</span><span>	</span><span style=color:#bf616a>authTokenBundle credentials</span><span>.</span><span style=color:#b48ead>Bundle
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>}
+</span></code></pre><p>之后的所有请求都可以统一复用该结构体；其中 etcd <code>watch</code> API 相关结构的实现是通过 <code>watcher</code> 结构体实现。<p>客户端在发起 watch 请求后，会创建 gRPC 长连接的代理对象 <code>watcherGrpcStream</code>，同时会启动协程 <code>watcherGrpcStream.serveWatchClient</code> 持续轮询处理来自 etcd 服务端的响应。<h2 id=watch-liu-cheng><a aria-label="Anchor link for: watch-liu-cheng" class=zola-anchor href=#watch-liu-cheng>watch 流程</a></h2><script src=https://wiserfz.github.io/js/mermaid.js></script><pre class=mermaid>
+  sequenceDiagram
+    participant app as application
+    participant client as Client
+    participant watcher
+    participant watchGrpcStream
+    participant watch_client as Watch_WatchClient
+    participant watcherStream
+
+    app->>client: init Client: `clientv3:New`
+    client->>watcher: send watch request by Client: `client.Watch`
+
+    watcher->>watcher: init `watchRequest`
+    watcher->>watchGrpcStream: init watchGrpcStream: `wathcer.newWatcherGrpcStream` and run goroutine `go watchGrpcStream.run`
+
+    watchGrpcStream->>watch_client: init `Watch_WatchClient`: `watchGrpcStream.newWatchClient`
+    watchGrpcStream->>watchGrpcStream: run goroutine `watchGrpcStream.serverWatchClinet`
+    watch_client->>watch_client: receive response from etcd
+
+    watcher->>watchGrpcStream: send `watchRequest` by `watchGrpcStream.reqc`
+    watchGrpcStream->>watcherStream: init `watcherStream` and run goroutine `go watchGrpcStream.serverSubstream`
+
+    watchGrpcStream->>watchGrpcStream: send watch gRPC request to etcd
+
+    watcherStream->>watcher: send `WatchResponse` channel(`outc`) by `watchRequest.retc`
+    watcher->>app: return `WatchResponse` channel(`outc`) which receive from `watchRequest.retc`
+
+    watch_client->>watchGrpcStream: receive change event from etcd and send it by `watchGrpcStream.respc` channel
+    watchGrpcStream->>watcherStream: dispatch change event by stream id
+    watcherStream->>app: send change event by `outc` channel
+</pre><h3 id=client-watch><a aria-label="Anchor link for: client-watch" class=zola-anchor href=#client-watch>Client.Watch</a></h3><p>这里 <code>Client.Watch</code> 方法就是 <code>watcher.Watch</code> 方法，该方法的核心逻辑是：<ul><li>初始化 <code>WatchRequest</code> 结构体，该结构体中包含我认为比较重要的字段 <code>createdNotify</code> 以及 <code>retc</code>；<strong>其中 <code>createdNotify</code> 为 bool 表示是否返回 <code>Watch</code> 请求的 response 而 <code>retc</code> 则是用于返回 channel，该 channel 用于应用方接收 etcd 的返回。</strong><li><code>watcher.streams</code> 是 <code>map[string]*watchGrpcStream</code> 表示多个 gRPC stream，可以通过 <code>context.Value</code> 设置不同的 key，可以使用多个 watch 请求复用多个 gRPC stream，通常 key 为空且复用同一个 gRPC stream<li>如果 gRPC 连接或者 gRPC stream 没有初始化，调用 <code>watcher.newWatcherGrpcStream</code> 方法完成其初始化动作. <code>watchGrpcStream</code> 本身是有生命周期的，在 <code>watcher.newWatcherGrpcStream</code> 方法中，会异步开启一个协程负责 <code>watchGrpcStream</code> 的运行<li>将初始化的 <code>WatchRequest</code> 通过 <code>watchGrpcStream.reqc</code> 发送到 <code>watchGrpcStream</code> 的运行协程中处理<li>当 watch 请求处理完毕，对应的 watch channel 会通过 <code>WatchRequest.retc</code> 中传出</ul><pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>w </span><span>*</span><span style=color:#b48ead>watcher</span><span>) </span><span style=color:#8fa1b3>Watch</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>key </span><span style=color:#b48ead>string</span><span>, </span><span style=color:#bf616a>opts </span><span>...</span><span style=color:#b48ead>OpOption</span><span>) </span><span style=color:#b48ead>WatchChan </span><span>{
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#bf616a>wr </span><span>:= &</span><span style=color:#bf616a>watchRequest</span><span>{
+</span><span>		</span><span style=color:#bf616a>ctx</span><span>:            </span><span style=color:#bf616a>ctx</span><span>,
+</span><span>		</span><span style=color:#bf616a>createdNotify</span><span>:  </span><span style=color:#bf616a>ow</span><span>.</span><span style=color:#bf616a>createdNotify</span><span>,
+</span><span>		</span><span style=color:#bf616a>key</span><span>:            </span><span style=color:#bf616a>string</span><span>(</span><span style=color:#bf616a>ow</span><span>.</span><span style=color:#bf616a>key</span><span>),
+</span><span>		</span><span style=color:#bf616a>end</span><span>:            </span><span style=color:#bf616a>string</span><span>(</span><span style=color:#bf616a>ow</span><span>.</span><span style=color:#bf616a>end</span><span>),
+</span><span>		</span><span style=color:#bf616a>rev</span><span>:            </span><span style=color:#bf616a>ow</span><span>.</span><span style=color:#bf616a>rev</span><span>,
+</span><span>		</span><span style=color:#bf616a>progressNotify</span><span>: </span><span style=color:#bf616a>ow</span><span>.</span><span style=color:#bf616a>progressNotify</span><span>,
+</span><span>		</span><span style=color:#bf616a>fragment</span><span>:       </span><span style=color:#bf616a>ow</span><span>.</span><span style=color:#bf616a>fragment</span><span>,
+</span><span>		</span><span style=color:#bf616a>filters</span><span>:        </span><span style=color:#bf616a>filters</span><span>,
+</span><span>		</span><span style=color:#bf616a>prevKV</span><span>:         </span><span style=color:#bf616a>ow</span><span>.</span><span style=color:#bf616a>prevKV</span><span>,
+</span><span>		</span><span style=color:#bf616a>retc</span><span>:           </span><span style=color:#96b5b4>make</span><span>(</span><span style=color:#b48ead>chan chan WatchResponse</span><span>, </span><span style=color:#d08770>1</span><span>),
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#bf616a>ok </span><span>:= </span><span style=color:#d08770>false
+</span><span>	</span><span style=color:#bf616a>ctxKey </span><span>:= </span><span style=color:#bf616a>streamKeyFromCtx</span><span>(</span><span style=color:#bf616a>ctx</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#b48ead>var </span><span style=color:#bf616a>closeCh </span><span style=color:#b48ead>chan WatchResponse
+</span><span>	</span><span style=color:#b48ead>for </span><span>{
+</span><span>		</span><span style=color:#65737e>// find or allocate appropriate grpc watch stream
+</span><span>		</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>mu</span><span>.</span><span style=color:#bf616a>Lock</span><span>()
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>streams </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#65737e>// closed
+</span><span>			</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>mu</span><span>.</span><span style=color:#bf616a>Unlock</span><span>()
+</span><span>			</span><span style=color:#bf616a>ch </span><span>:= </span><span style=color:#96b5b4>make</span><span>(</span><span style=color:#b48ead>chan WatchResponse</span><span>)
+</span><span>			</span><span style=color:#96b5b4>close</span><span>(</span><span style=color:#bf616a>ch</span><span>)
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ch
+</span><span>		}
+</span><span>		</span><span style=color:#65737e>// 通过 ctxKey 标识唯一的 gRPC stream
+</span><span>		</span><span style=color:#bf616a>wgs </span><span>:= </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>streams</span><span>[</span><span style=color:#bf616a>ctxKey</span><span>]
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>wgs </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#bf616a>wgs </span><span>= </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>newWatcherGrpcStream</span><span>(</span><span style=color:#bf616a>ctx</span><span>)
+</span><span>			</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>streams</span><span>[</span><span style=color:#bf616a>ctxKey</span><span>] = </span><span style=color:#bf616a>wgs
+</span><span>		}
+</span><span>		</span><span style=color:#bf616a>donec </span><span>:= </span><span style=color:#bf616a>wgs</span><span>.</span><span style=color:#bf616a>donec
+</span><span>		</span><span style=color:#bf616a>reqc </span><span>:= </span><span style=color:#bf616a>wgs</span><span>.</span><span style=color:#bf616a>reqc
+</span><span>		</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>mu</span><span>.</span><span style=color:#bf616a>Unlock</span><span>()
+</span><span>
+</span><span>		</span><span style=color:#65737e>// couldn't create channel; return closed channel
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>closeCh </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#bf616a>closeCh </span><span>= </span><span style=color:#96b5b4>make</span><span>(</span><span style=color:#b48ead>chan WatchResponse</span><span>, </span><span style=color:#d08770>1</span><span>)
+</span><span>		}
+</span><span>
+</span><span>		</span><span style=color:#65737e>// submit request
+</span><span>		</span><span style=color:#b48ead>select </span><span>{
+</span><span>		</span><span style=color:#b48ead>case </span><span style=color:#bf616a>reqc </span><span>&lt;- </span><span style=color:#bf616a>wr</span><span>:
+</span><span>			</span><span style=color:#bf616a>ok </span><span>= </span><span style=color:#d08770>true
+</span><span>			</span><span style=color:#65737e>// ...
+</span><span>		}
+</span><span>
+</span><span>		</span><span style=color:#65737e>// receive channel
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ok </span><span>{
+</span><span>			</span><span style=color:#b48ead>select </span><span>{
+</span><span>			</span><span style=color:#65737e>// 接收 WatchResponse channel
+</span><span>			</span><span style=color:#b48ead>case </span><span style=color:#bf616a>ret </span><span>:= &lt;-</span><span style=color:#bf616a>wr</span><span>.</span><span style=color:#bf616a>retc</span><span>:
+</span><span>				</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ret
+</span><span>				</span><span style=color:#65737e>// ...
+</span><span>			}
+</span><span>		}
+</span><span>		</span><span style=color:#b48ead>break
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#96b5b4>close</span><span>(</span><span style=color:#bf616a>closeCh</span><span>)
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>closeCh
+</span><span>}
+</span></code></pre><p><strong>补充：可以通过 <code>clientv3.WithCreatedNotify()</code> 函数设置 <code>createdNotify</code> 字段。</strong><h3 id=watchgrpcstream-run><a aria-label="Anchor link for: watchgrpcstream-run" class=zola-anchor href=#watchgrpcstream-run>watchGrpcStream.run</a></h3><p>在该方法中，主要实现以下逻辑：<ul><li>通过 <code>watchGrpcStream.newWatchClient</code> 方法，构造了和 etcd 服务端之间的 gRPC 连接以及 gRPC stream</ul><pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>w </span><span>*</span><span style=color:#b48ead>watchGrpcStream</span><span>) </span><span style=color:#8fa1b3>newWatchClient</span><span>() (</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#b48ead>Watch_WatchClient</span><span>, </span><span style=color:#b48ead>error</span><span>) {
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>	</span><span style=color:#65737e>// 通过 `watchGrpcStream.openWatchClient` 方法创建 gRPC 连接以及 gRPC stream
+</span><span>	</span><span style=color:#bf616a>wc</span><span>, </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>openWatchClient</span><span>()
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>	</span><span style=color:#65737e>// 通过 `watchGrpcStream.serverWatchClient` 方法持续从 gRPC 连接中接收 etcd 返回的响应
+</span><span>	</span><span style=color:#b48ead>go </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>serveWatchClient</span><span>(</span><span style=color:#bf616a>wc</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>wc
+</span><span>}
+</span><span>
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>w </span><span>*</span><span style=color:#b48ead>watchGrpcStream</span><span>) </span><span style=color:#8fa1b3>openWatchClient</span><span>() (</span><span style=color:#bf616a>ws pb</span><span>.</span><span style=color:#b48ead>Watch_WatchClient</span><span>, </span><span style=color:#bf616a>err </span><span style=color:#b48ead>error</span><span>) {
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>	</span><span style=color:#b48ead>for </span><span>{
+</span><span>		</span><span style=color:#65737e>// ...
+</span><span>		</span><span style=color:#65737e>// 通过发起 gRPC watch reqeust 建立 gRPC 连接以及 gRPC stream
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ws</span><span>, </span><span style=color:#bf616a>err </span><span>= </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>remote</span><span>.</span><span style=color:#bf616a>Watch</span><span>(</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>callOpts</span><span>...); </span><span style=color:#bf616a>ws </span><span>!= </span><span style=color:#d08770>nil </span><span>&& </span><span style=color:#bf616a>err </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#b48ead>break
+</span><span>		}
+</span><span>		</span><span style=color:#65737e>// ...
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ws</span><span>, </span><span style=color:#d08770>nil
+</span><span>}
+</span><span>
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>w </span><span>*</span><span style=color:#b48ead>watchGrpcStream</span><span>) </span><span style=color:#8fa1b3>serveWatchClient</span><span>(</span><span style=color:#bf616a>wc pb</span><span>.</span><span style=color:#b48ead>Watch_WatchClient</span><span>) {
+</span><span>	</span><span style=color:#b48ead>for </span><span>{
+</span><span>		</span><span style=color:#65737e>// 从 gRPC 连接中接收返回
+</span><span>		</span><span style=color:#bf616a>resp</span><span>, </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>wc</span><span>.</span><span style=color:#bf616a>Recv</span><span>()
+</span><span>		</span><span style=color:#65737e>// ...
+</span><span>		</span><span style=color:#b48ead>select </span><span>{
+</span><span>		</span><span style=color:#b48ead>case </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>respc </span><span>&lt;- </span><span style=color:#bf616a>resp</span><span>:
+</span><span>		</span><span style=color:#b48ead>case </span><span>&lt;-</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>donec</span><span>:
+</span><span>			</span><span style=color:#b48ead>return
+</span><span>		}
+</span><span>	}
+</span><span>}
+</span></code></pre><ul><li>持续轮询的处理来自应用发送的请求以及来自 etcd 返回的响应<li>当应用新发送一个 watch 的请求时，会创建一个新的 <code>watcherStream</code> 并运行一个 goroutine 调用 <code>watchGrpcStream.serverSubstream</code> 方法服务与不同的 watch 请求<li>从 response channel 中接收 etcd 响应的数据，并通过 <code>watchGrpcStream.dispatchEvent</code> 发给专属的 <code>watcherStream</code></ul><pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>w </span><span>*</span><span style=color:#b48ead>watchGrpcStream</span><span>) </span><span style=color:#8fa1b3>run</span><span>() {
+</span><span>	</span><span style=color:#b48ead>var </span><span style=color:#bf616a>wc pb</span><span>.</span><span style=color:#b48ead>Watch_WatchClient
+</span><span>	</span><span style=color:#65737e>// ..
+</span><span>
+</span><span>	</span><span style=color:#65737e>// start a stream with the etcd grpc server
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>wc</span><span>, </span><span style=color:#bf616a>closeErr </span><span>= </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>newWatchClient</span><span>(); </span><span style=color:#bf616a>closeErr </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#bf616a>cancelSet </span><span>:= </span><span style=color:#96b5b4>make</span><span>(</span><span style=color:#b48ead>map</span><span>[</span><span style=color:#b48ead>int64</span><span>]</span><span style=color:#b48ead>struct</span><span>{})
+</span><span>
+</span><span>	</span><span style=color:#b48ead>var </span><span style=color:#bf616a>cur </span><span>*</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#b48ead>WatchResponse
+</span><span>	</span><span style=color:#bf616a>backoff </span><span>:= </span><span style=color:#bf616a>time</span><span>.</span><span style=color:#bf616a>Millisecond
+</span><span>	</span><span style=color:#b48ead>for </span><span>{
+</span><span>		</span><span style=color:#b48ead>select </span><span>{
+</span><span>		</span><span style=color:#65737e>// 处理 Watch() 请求
+</span><span>		</span><span style=color:#b48ead>case </span><span style=color:#bf616a>req </span><span>:= &lt;-</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>reqc</span><span>:
+</span><span>			</span><span style=color:#b48ead>switch </span><span style=color:#bf616a>wreq </span><span>:= </span><span style=color:#bf616a>req</span><span>.(</span><span style=color:#b48ead>type</span><span>) {
+</span><span>			</span><span style=color:#b48ead>case </span><span>*</span><span style=color:#bf616a>watchRequest</span><span>:
+</span><span>				</span><span style=color:#bf616a>outc </span><span>:= </span><span style=color:#96b5b4>make</span><span>(</span><span style=color:#b48ead>chan WatchResponse</span><span>, </span><span style=color:#d08770>1</span><span>)
+</span><span>				</span><span style=color:#65737e>// TODO: pass custom watch ID?
+</span><span>				</span><span style=color:#bf616a>ws </span><span>:= &</span><span style=color:#bf616a>watcherStream</span><span>{
+</span><span>					</span><span style=color:#bf616a>initReq</span><span>: *</span><span style=color:#bf616a>wreq</span><span>,
+</span><span>					</span><span style=color:#bf616a>id</span><span>:      </span><span style=color:#bf616a>InvalidWatchID</span><span>,
+</span><span>					</span><span style=color:#bf616a>outc</span><span>:    </span><span style=color:#bf616a>outc</span><span>,
+</span><span>					</span><span style=color:#65737e>// unbuffered so resumes won't cause repeat events
+</span><span>					</span><span style=color:#bf616a>recvc</span><span>: </span><span style=color:#96b5b4>make</span><span>(</span><span style=color:#b48ead>chan </span><span>*</span><span style=color:#b48ead>WatchResponse</span><span>),
+</span><span>				}
+</span><span>
+</span><span>				</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>donec </span><span>= </span><span style=color:#96b5b4>make</span><span>(</span><span style=color:#b48ead>chan struct</span><span>{})
+</span><span>				</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>wg</span><span>.</span><span style=color:#bf616a>Add</span><span>(</span><span style=color:#d08770>1</span><span>)
+</span><span>				</span><span style=color:#65737e>// 为每一个 watch 请求创建一个 goroutine 处理 etcd 返回的响应
+</span><span>				</span><span style=color:#b48ead>go </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>serveSubstream</span><span>(</span><span style=color:#bf616a>ws</span><span>, </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>resumec</span><span>)
+</span><span>
+</span><span>				</span><span style=color:#65737e>// queue up for watcher creation/resume
+</span><span>				</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>resuming </span><span>= </span><span style=color:#96b5b4>append</span><span>(</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>resuming</span><span>, </span><span style=color:#bf616a>ws</span><span>)
+</span><span>				</span><span style=color:#b48ead>if </span><span style=color:#96b5b4>len</span><span>(</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>resuming</span><span>) == </span><span style=color:#d08770>1 </span><span>{
+</span><span>					</span><span style=color:#65737e>// 发送 watch gRPC 请求
+</span><span>					</span><span style=color:#65737e>// head of resume queue, can register a new watcher
+</span><span>					</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>wc</span><span>.</span><span style=color:#bf616a>Send</span><span>(</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>initReq</span><span>.</span><span style=color:#bf616a>toPB</span><span>()); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>						</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>lg</span><span>.</span><span style=color:#bf616a>Debug</span><span>("</span><span style=color:#a3be8c>error when sending request</span><span>", </span><span style=color:#bf616a>zap</span><span>.</span><span style=color:#bf616a>Error</span><span>(</span><span style=color:#bf616a>err</span><span>))
+</span><span>					}
+</span><span>				}
+</span><span>				</span><span style=color:#65737e>// ...
+</span><span>			}
+</span><span>
+</span><span>		</span><span style=color:#65737e>// new events from the watch client
+</span><span>		</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pbresp </span><span>:= &lt;-</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>respc</span><span>:
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>cur </span><span>== </span><span style=color:#d08770>nil </span><span>|| </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>Created </span><span>|| </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>Canceled </span><span>{
+</span><span>				</span><span style=color:#bf616a>cur </span><span>= </span><span style=color:#bf616a>pbresp
+</span><span>			} </span><span style=color:#b48ead>else if </span><span style=color:#bf616a>cur </span><span>!= </span><span style=color:#d08770>nil </span><span>&& </span><span style=color:#bf616a>cur</span><span>.</span><span style=color:#bf616a>WatchId </span><span>== </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>WatchId </span><span>{
+</span><span>				</span><span style=color:#65737e>// merge new events
+</span><span>				</span><span style=color:#bf616a>cur</span><span>.</span><span style=color:#bf616a>Events </span><span>= </span><span style=color:#96b5b4>append</span><span>(</span><span style=color:#bf616a>cur</span><span>.</span><span style=color:#bf616a>Events</span><span>, </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>Events</span><span>...)
+</span><span>				</span><span style=color:#65737e>// update "Fragment" field; last response with "Fragment" == false
+</span><span>				</span><span style=color:#bf616a>cur</span><span>.</span><span style=color:#bf616a>Fragment </span><span>= </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>Fragment
+</span><span>			}
+</span><span>
+</span><span>			</span><span style=color:#b48ead>switch </span><span>{
+</span><span>			</span><span style=color:#65737e>// Watch() 请求返回成功的响应
+</span><span>			</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>Created</span><span>:
+</span><span>				</span><span style=color:#65737e>// response to head of queue creation
+</span><span>				</span><span style=color:#b48ead>if </span><span style=color:#96b5b4>len</span><span>(</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>resuming</span><span>) != </span><span style=color:#d08770>0 </span><span>{
+</span><span>					</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ws </span><span>:= </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>resuming</span><span>[</span><span style=color:#d08770>0</span><span>]; </span><span style=color:#bf616a>ws </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>						</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>addSubstream</span><span>(</span><span style=color:#bf616a>pbresp</span><span>, </span><span style=color:#bf616a>ws</span><span>)
+</span><span>						</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>dispatchEvent</span><span>(</span><span style=color:#bf616a>pbresp</span><span>)
+</span><span>						</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>resuming</span><span>[</span><span style=color:#d08770>0</span><span>] = </span><span style=color:#d08770>nil
+</span><span>					}
+</span><span>				}
+</span><span>
+</span><span>				</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>			</span><span style=color:#65737e>// 发送 WatchCancelRequest 时，正常退出时接收到的响应
+</span><span>			</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>Canceled </span><span>&& </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>CompactRevision </span><span>== </span><span style=color:#d08770>0</span><span>:
+</span><span>				</span><span style=color:#96b5b4>delete</span><span>(</span><span style=color:#bf616a>cancelSet</span><span>, </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>WatchId</span><span>)
+</span><span>				</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ws</span><span>, </span><span style=color:#bf616a>ok </span><span>:= </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>substreams</span><span>[</span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>WatchId</span><span>]; </span><span style=color:#bf616a>ok </span><span>{
+</span><span>					</span><span style=color:#65737e>// signal to stream goroutine to update closingc
+</span><span>					</span><span style=color:#96b5b4>close</span><span>(</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>recvc</span><span>)
+</span><span>					</span><span style=color:#bf616a>closing</span><span>[</span><span style=color:#bf616a>ws</span><span>] = </span><span style=color:#b48ead>struct</span><span>{}{}
+</span><span>				}
+</span><span>
+</span><span>				</span><span style=color:#65737e>// reset for next iteration
+</span><span>				</span><span style=color:#bf616a>cur </span><span>= </span><span style=color:#d08770>nil
+</span><span>
+</span><span>			</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>			</span><span style=color:#b48ead>default</span><span>:
+</span><span>				</span><span style=color:#65737e>// dispatch to appropriate watch stream
+</span><span>				</span><span style=color:#bf616a>ok </span><span>:= </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>dispatchEvent</span><span>(</span><span style=color:#bf616a>cur</span><span>)
+</span><span>
+</span><span>				</span><span style=color:#65737e>// ...
+</span><span>			}
+</span><span>
+</span><span>			</span><span style=color:#65737e>// ...
+</span><span>		}
+</span><span>	}
+</span><span>}
+</span><span>
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>w </span><span>*</span><span style=color:#b48ead>watchGrpcStream</span><span>) </span><span style=color:#8fa1b3>dispatchEvent</span><span>(</span><span style=color:#bf616a>pbresp </span><span>*</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#b48ead>WatchResponse</span><span>) </span><span style=color:#b48ead>bool </span><span>{
+</span><span>	</span><span style=color:#bf616a>events </span><span>:= </span><span style=color:#96b5b4>make</span><span>([]*</span><span style=color:#b48ead>Event</span><span>, </span><span style=color:#96b5b4>len</span><span>(</span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>Events</span><span>))
+</span><span>	</span><span style=color:#b48ead>for </span><span style=color:#bf616a>i</span><span>, </span><span style=color:#bf616a>ev </span><span>:= </span><span style=color:#b48ead>range </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>Events </span><span>{
+</span><span>		</span><span style=color:#bf616a>events</span><span>[</span><span style=color:#bf616a>i</span><span>] = (*</span><span style=color:#bf616a>Event</span><span>)(</span><span style=color:#bf616a>ev</span><span>)
+</span><span>	}
+</span><span>	</span><span style=color:#65737e>// TODO: return watch ID?
+</span><span>	</span><span style=color:#bf616a>wr </span><span>:= &</span><span style=color:#bf616a>WatchResponse</span><span>{
+</span><span>		</span><span style=color:#bf616a>Header</span><span>:          *</span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>Header</span><span>,
+</span><span>		</span><span style=color:#bf616a>Events</span><span>:          </span><span style=color:#bf616a>events</span><span>,
+</span><span>		</span><span style=color:#bf616a>CompactRevision</span><span>: </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>CompactRevision</span><span>,
+</span><span>		</span><span style=color:#bf616a>Created</span><span>:         </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>Created</span><span>,
+</span><span>		</span><span style=color:#bf616a>Canceled</span><span>:        </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>Canceled</span><span>,
+</span><span>		</span><span style=color:#bf616a>cancelReason</span><span>:    </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>CancelReason</span><span>,
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>unicastResponse</span><span>(</span><span style=color:#bf616a>wr</span><span>, </span><span style=color:#bf616a>pbresp</span><span>.</span><span style=color:#bf616a>WatchId</span><span>)
+</span><span>
+</span><span>}
+</span><span>
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>w </span><span>*</span><span style=color:#b48ead>watchGrpcStream</span><span>) </span><span style=color:#8fa1b3>unicastResponse</span><span>(</span><span style=color:#bf616a>wr </span><span>*</span><span style=color:#b48ead>WatchResponse</span><span>, </span><span style=color:#bf616a>watchId </span><span style=color:#b48ead>int64</span><span>) </span><span style=color:#b48ead>bool </span><span>{
+</span><span>	</span><span style=color:#bf616a>ws</span><span>, </span><span style=color:#bf616a>ok </span><span>:= </span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>substreams</span><span>[</span><span style=color:#bf616a>watchId</span><span>]
+</span><span>	</span><span style=color:#b48ead>if </span><span>!</span><span style=color:#bf616a>ok </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>false
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>select </span><span>{
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>recvc </span><span>&lt;- </span><span style=color:#bf616a>wr</span><span>:
+</span><span>	</span><span style=color:#b48ead>case </span><span>&lt;-</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>donec</span><span>:
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>false
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#d08770>true
+</span><span>}
+</span></code></pre><p>当 <code>watchGrpcStream</code> 的运行协程通过 <code>respc</code> 接收到 etcd 的响应后，根据 <code>pbresp.Created</code> 以及 <code>pbresp.Canceled</code> 和 <code>pbresp.CompactRevision</code> 字段分为不同的情况处理。<ol><li><code>pbresp.Created</code> 为 true 时；则 watch gRPC 请求成功<li><code>pbresp.Canceled</code> 为 true 且 <code>pbresp.CompactRevision</code> 为 0 时；则是 watch cancel reqeust 请求成功<li>返回响应给应用方处理</ol><p><span id=watch-resp>对于返回的 etcd 响应需要根据 etcd 中的代码逻辑仔细处理；防止出现 watch 失败以及 change 事件丢失等 bug。</span><p>注意到，在初始化 <code>watcherStream</code> 时，stream id 为 <code>InvalidWatchID</code>，在收到第一个 watch response 时，会更改为 stream id。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>w </span><span>*</span><span style=color:#b48ead>watchGrpcStream</span><span>) </span><span style=color:#8fa1b3>addSubstream</span><span>(</span><span style=color:#bf616a>resp </span><span>*</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#b48ead>WatchResponse</span><span>, </span><span style=color:#bf616a>ws </span><span>*</span><span style=color:#b48ead>watcherStream</span><span>) {
+</span><span>	</span><span style=color:#65737e>// check watch ID for backward compatibility (&lt;= v3.3)
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>resp</span><span>.</span><span style=color:#bf616a>WatchId </span><span>== </span><span style=color:#bf616a>InvalidWatchID </span><span>|| (</span><span style=color:#bf616a>resp</span><span>.</span><span style=color:#bf616a>Canceled </span><span>&& </span><span style=color:#bf616a>resp</span><span>.</span><span style=color:#bf616a>CancelReason </span><span>!= "") {
+</span><span>		</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>closeErr </span><span>= </span><span style=color:#bf616a>v3rpc</span><span>.</span><span style=color:#bf616a>Error</span><span>(</span><span style=color:#bf616a>errors</span><span>.</span><span style=color:#bf616a>New</span><span>(</span><span style=color:#bf616a>resp</span><span>.</span><span style=color:#bf616a>CancelReason</span><span>))
+</span><span>		</span><span style=color:#65737e>// failed; no channel
+</span><span>		</span><span style=color:#96b5b4>close</span><span>(</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>recvc</span><span>)
+</span><span>		</span><span style=color:#b48ead>return
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>id </span><span>= </span><span style=color:#bf616a>resp</span><span>.</span><span style=color:#bf616a>WatchId
+</span><span>	</span><span style=color:#bf616a>w</span><span>.</span><span style=color:#bf616a>substreams</span><span>[</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>id</span><span>] = </span><span style=color:#bf616a>ws
+</span><span>}
+</span></code></pre><p>最后会通过 <code>watchGrpcStream.dispatchEvent</code> 方法，通过将其投递到 <code>watcherStream</code> 的 <code>recvc</code> 当中。<h3 id=watchgrpcstream-servesubstream><a aria-label="Anchor link for: watchgrpcstream-servesubstream" class=zola-anchor href=#watchgrpcstream-servesubstream>watchGrpcStream.serveSubstream</a></h3><p>在该方法中，处理的逻辑主要是收到 etcd 的响应后，需要返回给特定的 watch channel，这里通过提前创建好的 <code>outc</code> channel，应用方通过这个 channel 接收 etcd 的 response。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>w </span><span>*</span><span style=color:#b48ead>watchGrpcStream</span><span>) </span><span style=color:#8fa1b3>serveSubstream</span><span>(</span><span style=color:#bf616a>ws </span><span>*</span><span style=color:#b48ead>watcherStream</span><span>, </span><span style=color:#bf616a>resumec </span><span style=color:#b48ead>chan struct</span><span>{}) {
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#65737e>// nextRev is the minimum expected next revision
+</span><span>	</span><span style=color:#bf616a>nextRev </span><span>:= </span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>initReq</span><span>.</span><span style=color:#bf616a>rev
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#bf616a>emptyWr </span><span>:= &</span><span style=color:#bf616a>WatchResponse</span><span>{}
+</span><span>	</span><span style=color:#b48ead>for </span><span>{
+</span><span>		</span><span style=color:#bf616a>curWr </span><span>:= </span><span style=color:#bf616a>emptyWr
+</span><span>		</span><span style=color:#bf616a>outc </span><span>:= </span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>outc
+</span><span>
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#96b5b4>len</span><span>(</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>buf</span><span>) > </span><span style=color:#d08770>0 </span><span>{
+</span><span>			</span><span style=color:#bf616a>curWr </span><span>= </span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>buf</span><span>[</span><span style=color:#d08770>0</span><span>]
+</span><span>		} </span><span style=color:#b48ead>else </span><span>{
+</span><span>			</span><span style=color:#bf616a>outc </span><span>= </span><span style=color:#d08770>nil
+</span><span>		}
+</span><span>		</span><span style=color:#b48ead>select </span><span>{
+</span><span>		</span><span style=color:#65737e>// 发送 etcd response
+</span><span>		</span><span style=color:#b48ead>case </span><span style=color:#bf616a>outc </span><span>&lt;- *</span><span style=color:#bf616a>curWr</span><span>:
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>buf</span><span>[</span><span style=color:#d08770>0</span><span>].</span><span style=color:#bf616a>Err</span><span>() != </span><span style=color:#d08770>nil </span><span>{
+</span><span>				</span><span style=color:#b48ead>return
+</span><span>			}
+</span><span>			</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>buf</span><span>[</span><span style=color:#d08770>0</span><span>] = </span><span style=color:#d08770>nil
+</span><span>			</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>buf </span><span>= </span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>buf</span><span>[</span><span style=color:#d08770>1</span><span>:]
+</span><span>		</span><span style=color:#65737e>// 接收 etcd response
+</span><span>		</span><span style=color:#b48ead>case </span><span style=color:#bf616a>wr</span><span>, </span><span style=color:#bf616a>ok </span><span>:= &lt;-</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>recvc</span><span>:
+</span><span>			</span><span style=color:#b48ead>if </span><span>!</span><span style=color:#bf616a>ok </span><span>{
+</span><span>				</span><span style=color:#65737e>// shutdown from closeSubstream
+</span><span>				</span><span style=color:#b48ead>return
+</span><span>			}
+</span><span>
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>wr</span><span>.</span><span style=color:#bf616a>Created </span><span>{
+</span><span>				</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>initReq</span><span>.</span><span style=color:#bf616a>retc </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>					</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>initReq</span><span>.</span><span style=color:#bf616a>retc </span><span>&lt;- </span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>outc
+</span><span>					</span><span style=color:#65737e>// to prevent next write from taking the slot in buffered channel
+</span><span>					</span><span style=color:#65737e>// and posting duplicate create events
+</span><span>					</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>initReq</span><span>.</span><span style=color:#bf616a>retc </span><span>= </span><span style=color:#d08770>nil
+</span><span>
+</span><span>					</span><span style=color:#65737e>// send first creation event only if requested
+</span><span>					</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>initReq</span><span>.</span><span style=color:#bf616a>createdNotify </span><span>{
+</span><span>						</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>outc </span><span>&lt;- *</span><span style=color:#bf616a>wr
+</span><span>					}
+</span><span>					</span><span style=color:#65737e>// ...
+</span><span>					</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>initReq</span><span>.</span><span style=color:#bf616a>rev </span><span>== </span><span style=color:#d08770>0 </span><span>{
+</span><span>						</span><span style=color:#bf616a>nextRev </span><span>= </span><span style=color:#bf616a>wr</span><span>.</span><span style=color:#bf616a>Header</span><span>.</span><span style=color:#bf616a>Revision
+</span><span>					}
+</span><span>				}
+</span><span>			} </span><span style=color:#b48ead>else </span><span>{
+</span><span>				</span><span style=color:#65737e>// current progress of watch; &lt;= store revision
+</span><span>				</span><span style=color:#bf616a>nextRev </span><span>= </span><span style=color:#bf616a>wr</span><span>.</span><span style=color:#bf616a>Header</span><span>.</span><span style=color:#bf616a>Revision </span><span>+ </span><span style=color:#d08770>1
+</span><span>			}
+</span><span>
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#96b5b4>len</span><span>(</span><span style=color:#bf616a>wr</span><span>.</span><span style=color:#bf616a>Events</span><span>) > </span><span style=color:#d08770>0 </span><span>{
+</span><span>				</span><span style=color:#bf616a>nextRev </span><span>= </span><span style=color:#bf616a>wr</span><span>.</span><span style=color:#bf616a>Events</span><span>[</span><span style=color:#96b5b4>len</span><span>(</span><span style=color:#bf616a>wr</span><span>.</span><span style=color:#bf616a>Events</span><span>)-</span><span style=color:#d08770>1</span><span>].</span><span style=color:#bf616a>Kv</span><span>.</span><span style=color:#bf616a>ModRevision </span><span>+ </span><span style=color:#d08770>1
+</span><span>			}
+</span><span>			</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>initReq</span><span>.</span><span style=color:#bf616a>rev </span><span>= </span><span style=color:#bf616a>nextRev
+</span><span>
+</span><span>			</span><span style=color:#65737e>// created event is already sent above,
+</span><span>			</span><span style=color:#65737e>// watcher should not post duplicate events
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>wr</span><span>.</span><span style=color:#bf616a>Created </span><span>{
+</span><span>				</span><span style=color:#b48ead>continue
+</span><span>			}
+</span><span>
+</span><span>			</span><span style=color:#65737e>// TODO pause channel if buffer gets too large
+</span><span>			</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>buf </span><span>= </span><span style=color:#96b5b4>append</span><span>(</span><span style=color:#bf616a>ws</span><span>.</span><span style=color:#bf616a>buf</span><span>, </span><span style=color:#bf616a>wr</span><span>)
+</span><span>			</span><span style=color:#65737e>// ...
+</span><span>		}
+</span><span>	}
+</span><span>	</span><span style=color:#65737e>// lazily send cancel message if events on missing id
+</span><span>}
+</span></code></pre><h1 id=wen-ti-ji-lu><a aria-label="Anchor link for: wen-ti-ji-lu" class=zola-anchor href=#wen-ti-ji-lu>问题记录</a></h1><p>由于业务需求，某个应用需要 watch 多个应用实例；因此这里会有多个实现方案的选择；比较粗糙的一种是 watch 的每个服务有各自的 client，即有各自的 gRPC 连接，或者使用优雅的方式多个服务复用一条 gRPC 连接；因此在采用复用连接的方式时，需要小心处理每一个 watch 请求；而该问题就是关于 watch 请求的响应没有正确的处理，导致 watch 请求没有成功从而导致无法获取应用实例的变化。<p>由于第一次的 watch 请求，会建立 gRPC 连接并会通过 HTTP2 的状态码返回是否 watch 成功，因此第一次 watch 的成功与否都可以通过返回的 error 判断是否成功；但是对于基于已经建立的连接在次发起 watch 请求时，由于不会在会有 HTTP2 的状态码返回，因此第二次的 watch 从 API 接口来说永远都是成功的。<p>此时；需要通过 <code>WatchResponse</code> 中的字段判断是否 watch 成功，在 go client 中也有相似逻辑；具体见<a href=https://wiserfz.github.io/posts/etcd-watch/#watch-resp>这里</a>。<p>对于 rust 代码，增加以下内容解决：<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>impl</span><span>&lt;</span><span style=color:#b48ead>'a</span><span>> TryFrom&lt;&</span><span style=color:#b48ead>'a</span><span> WatchResponse> </span><span style=color:#b48ead>for </span><span>WatchResponseType&lt;</span><span style=color:#b48ead>'a</span><span>> {
+</span><span>    </span><span style=color:#b48ead>type </span><span>Error = Error;
+</span><span>
+</span><span>    </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>try_from</span><span>(</span><span style=color:#bf616a>resp</span><span>: &</span><span style=color:#b48ead>'a</span><span> WatchResponse) -> Result&lt;</span><span style=color:#b48ead>Self</span><span>, </span><span style=color:#b48ead>Self::</span><span>Error> {
+</span><span>        </span><span style=color:#b48ead>match </span><span>(resp.</span><span style=color:#96b5b4>created</span><span>(), resp.</span><span style=color:#96b5b4>canceled</span><span>()) {
+</span><span>            (</span><span style=color:#d08770>true</span><span>, </span><span style=color:#d08770>false</span><span>) => Ok(WatchResponseType::Created(resp.</span><span style=color:#96b5b4>watch_id</span><span>())),
+</span><span>            (</span><span style=color:#d08770>true</span><span>, </span><span style=color:#d08770>true</span><span>) => Err(Error::OtherError(resp.</span><span style=color:#96b5b4>cancel_reason</span><span>().</span><span style=color:#96b5b4>to_owned</span><span>())),
+</span><span>            (</span><span style=color:#d08770>false</span><span>, </span><span style=color:#d08770>true</span><span>) => {
+</span><span>                </span><span style=color:#b48ead>if</span><span> resp.</span><span style=color:#96b5b4>compact_revision</span><span>() != </span><span style=color:#d08770>0 </span><span>{
+</span><span>                    </span><span style=color:#65737e>// WARN: Due to watched keys are compacted by etcd,
+</span><span>                    </span><span style=color:#65737e>// there maybe some changed keys are missed, so this can't be retried.
+</span><span>                    Err(Error::OtherError(
+</span><span>                        "</span><span style=color:#a3be8c>etcd watch is canceled by key compation</span><span>".</span><span style=color:#96b5b4>into</span><span>(),
+</span><span>                    ))
+</span><span>                } </span><span style=color:#b48ead>else </span><span>{
+</span><span>                    Err(Error::OtherError("</span><span style=color:#a3be8c>etcd watch is canceled normal</span><span>".</span><span style=color:#96b5b4>into</span><span>()))
+</span><span>                }
+</span><span>            }
+</span><span>            (</span><span style=color:#d08770>false</span><span>, </span><span style=color:#d08770>false</span><span>) => </span><span style=color:#b48ead>match</span><span> resp.</span><span style=color:#96b5b4>header</span><span>() {
+</span><span>                Some(header) => Ok(WatchResponseType::Events(
+</span><span>                    resp.</span><span style=color:#96b5b4>watch_id</span><span>(),
+</span><span>                    header.</span><span style=color:#96b5b4>revision</span><span>(),
+</span><span>                    resp.</span><span style=color:#96b5b4>events</span><span>(),
+</span><span>                )),
+</span><span>                None => Err(EtcdError::WatchError(format!(
+</span><span>                    "</span><span style=color:#a3be8c>watch response is invalid for watch id </span><span style=color:#d08770>{}</span><span>",
+</span><span>                    resp.</span><span style=color:#96b5b4>watch_id</span><span>()
+</span><span>                ))
+</span><span>                .</span><span style=color:#96b5b4>into</span><span>()),
+</span><span>            },
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre></section></article></main></div></div><div class=right-content><div class=toc><div class=heading>Table of Contents</div><ul class=toc-list><li class=parent><a href=https://wiserfz.github.io/posts/etcd-watch/#qian-yan>前言</a><li class=parent><a href=https://wiserfz.github.io/posts/etcd-watch/#etcd-client-watch>etcd client watch</a> <ul><li><a href=https://wiserfz.github.io/posts/etcd-watch/#watch-liu-cheng>watch 流程</a></li><ul><li><a href=https://wiserfz.github.io/posts/etcd-watch/#client-watch>Client.Watch</a><li><a href=https://wiserfz.github.io/posts/etcd-watch/#watchgrpcstream-run>watchGrpcStream.run</a><li><a href=https://wiserfz.github.io/posts/etcd-watch/#watchgrpcstream-servesubstream>watchGrpcStream.serveSubstream</a></ul></ul><li class=parent><a href=https://wiserfz.github.io/posts/etcd-watch/#wen-ti-ji-lu>问题记录</a></ul></div></div>

@@ -1,0 +1,349 @@
+<!doctype html><html class="dark light" lang=en><head><meta charset=UTF-8><meta content="IE=edge" http-equiv=X-UA-Compatible><meta content="width=device-width,initial-scale=1.0" name=viewport><meta content=https://wiserfz.github.io name=base><title>
+            
+                gRPC go - resolver
+            
+        </title><meta content="gRPC go - resolver" property=og:title><meta content="Source code of grpc-go." property=og:description><meta content="Source code of grpc-go." name=description><link href=https://wiserfz.github.io/img/favicons/favicon.ico rel=icon type=image/png><link href=https://wiserfz.github.io/fonts.css rel=stylesheet><script defer src=https://wiserfz.github.io/js/codeblock.js></script><script defer src=https://wiserfz.github.io/js/toc.js></script><script>MathJax = {
+                    tex: {
+                        inlineMath: [
+                            ['$', '$'],
+                            ['\\(', '\\)']
+                        ]
+                    }
+                };</script><script async id=MathJax-script src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/atom.xml rel=alternate type=application/atom+xml><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/rss.xml rel=alternate type=application/rss+xml><link href=https://wiserfz.github.io/theme/light.css rel=stylesheet><link href=https://wiserfz.github.io/theme/dark.css id=darkModeStyle rel=stylesheet><script src=https://wiserfz.github.io/js/themetoggle.js></script><script>setTheme(getSavedTheme());</script><link href=https://wiserfz.github.io/main.css media=screen rel=stylesheet><script src="https://wiserfz.github.io/search_index.en.js?h=83f808dfc552363cb1ef" defer></script><script src="https://wiserfz.github.io/js/searchElasticlunr.min.js?h=3626c0ef99daa745b31e" defer></script><body><div class=left-content></div><div class=content><nav><div class=left-nav><a href=https://wiserfz.github.io>wiser's blog</a><div class=socials><a rel="'me" target="'_blank'" class=social href=https://wiserfz.github.io/rss.xml noopener&#x27;> <img alt=rss src=https://wiserfz.github.io/icons/social/rss.svg> </a><a rel="'me" target="'_blank'" class=social href=mailto:wiserfz810@gmail.com noopener&#x27;> <img alt=email src=https://wiserfz.github.io/icons/social/email.svg> </a><a rel="'me" target="'_blank'" class=social href=https://github.com/wiserfz/ noopener&#x27;> <img alt=github src=https://wiserfz.github.io/icons/social/github.svg> </a></div></div><div class=right-nav><a href=https://wiserfz.github.io style=margin-right:.5em>/home</a><a href=https://wiserfz.github.io/posts style=margin-right:.5em>/posts</a><a href=https://wiserfz.github.io/tags style=margin-right:.5em>/tags</a><a href=https://wiserfz.github.io/about style=margin-right:.5em>/about</a><button title="$SHORTCUT to open search" class=search-button id=search-button><img alt=Search class=search-icon src=https://wiserfz.github.io/icons/search.svg></button><div class="search-modal js" aria-labelledby=modalTitle id=searchModal role=dialog><div id=modal-content><h1 class=page-header id=modalTitle>Search</h1><div id=searchBar><input aria-controls=results-container aria-expanded=false autocomplete=off id=searchInput placeholder=Search... role=combobox spellcheck=false><button title="Clear search" class=clear-button id=clear-search><svg viewbox="0 -960 960 960" xmlns=http://www.w3.org/2000/svg><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg></button></div><div id=results-container><div id=results-info><span id=zero_results style=display:none>No results</span><span id=one_result style=display:none>1 result</span><span id=many_results style=display:none>$NUMBER results</span></div><div id=results role=listbox></div></div></div></div><a onclick="toggleTheme(); event.preventDefault();" href=# id=dark-mode-toggle> <img alt=Light id=sun-icon src=https://wiserfz.github.io/icons/sun.svg style=filter:invert()> <img alt=Dark id=moon-icon src=https://wiserfz.github.io/icons/moon.svg> </a><script>updateItemToggleTheme()</script></div></nav><div data-selector="main article p" class=visible-element-observer-root><main><article><div class=title><div class=page-header>gRPC go - resolver</div><div class=meta>Posted on <time>2024-10-05</time><span class=tags-label>::</span><span class=tags> <a class=post-tag href=https://wiserfz.github.io/tags/grpc/>gRPC</a> <a class=post-tag href=https://wiserfz.github.io/tags/code/>code</a> </span></div></div><section class=body><h2 id=qian-yan><a aria-label="Anchor link for: qian-yan" class=zola-anchor href=#qian-yan>前言</a></h2><p>最近阅读了 gRPC 在 rust 中的实现，也想了解 gRPC 在 go 中的实现；在以前的项目中使用微服务架构，大量使用 gRPC 进行服务间的 RPC 调用，但是当时并没有深入研究，现在回想起来大概有以下几点原因：<ol><li>项目是 TOB 项目，并没有集群的概念，每一个服务就一个实例<li>项目需求多，以实现功能为主要目标<li>个人问题，没有养成追根溯源习惯</ol><p>由于以上问题，没有很了解 gRPC client 在 go 是如何实现，并如何去合理使用的，现在把这些补一补。<h2 id=grpc-go><a aria-label="Anchor link for: grpc-go" class=zola-anchor href=#grpc-go>grpc-go</a></h2><p>由于 go 的文档相比于 rust 而言，实在是混乱不堪；没有办法从文档入手，了解项目的整体。因此；直接从项目的 example 中入手，去了解是一个比较好的方法。<p>PS：文章中所贴代码均为 <code>grpc-go v1.70.0</code> 版本的代码。<p><img alt="gRPC Go" src=/img/client-of-grpc-in-go/grpc-go.png><p>上图是我整理的 grpc-go 的上层结构图，没有包括底层 HTTP2 的实现，这篇文章主要了解整体流程以及 <code>Resolver</code>。<p>以 <code>example/helloword/greeter_client/main.go</code> 中的代码为例：<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>const </span><span>(
+</span><span>	</span><span style=color:#bf616a>defaultName </span><span>= "</span><span style=color:#a3be8c>world</span><span>"
+</span><span>)
+</span><span>
+</span><span style=color:#b48ead>var </span><span>(
+</span><span>	</span><span style=color:#bf616a>addr </span><span>= </span><span style=color:#bf616a>flag</span><span>.</span><span style=color:#bf616a>String</span><span>("</span><span style=color:#a3be8c>addr</span><span>", "</span><span style=color:#a3be8c>localhost:50051</span><span>", "</span><span style=color:#a3be8c>the address to connect to</span><span>")
+</span><span>	</span><span style=color:#bf616a>name </span><span>= </span><span style=color:#bf616a>flag</span><span>.</span><span style=color:#bf616a>String</span><span>("</span><span style=color:#a3be8c>name</span><span>", </span><span style=color:#bf616a>defaultName</span><span>, "</span><span style=color:#a3be8c>Name to greet</span><span>")
+</span><span>)
+</span><span>
+</span><span style=color:#b48ead>func </span><span style=color:#8fa1b3>main</span><span>() {
+</span><span>	</span><span style=color:#bf616a>flag</span><span>.</span><span style=color:#bf616a>Parse</span><span>()
+</span><span>	</span><span style=color:#65737e>// Set up a connection to the server.
+</span><span>	</span><span style=color:#bf616a>conn</span><span>, </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#bf616a>NewClient</span><span>(*</span><span style=color:#bf616a>addr</span><span>, </span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#bf616a>WithTransportCredentials</span><span>(</span><span style=color:#bf616a>insecure</span><span>.</span><span style=color:#bf616a>NewCredentials</span><span>()))
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#bf616a>log</span><span>.</span><span style=color:#bf616a>Fatalf</span><span>("</span><span style=color:#a3be8c>did not connect: </span><span style=color:#d08770>%v</span><span>", </span><span style=color:#bf616a>err</span><span>)
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>defer </span><span style=color:#bf616a>conn</span><span>.</span><span style=color:#bf616a>Close</span><span>()
+</span><span>	</span><span style=color:#bf616a>c </span><span>:= </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>NewGreeterClient</span><span>(</span><span style=color:#bf616a>conn</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#65737e>// Contact the server and print out its response.
+</span><span>	</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>cancel </span><span>:= </span><span style=color:#bf616a>context</span><span>.</span><span style=color:#bf616a>WithTimeout</span><span>(</span><span style=color:#bf616a>context</span><span>.</span><span style=color:#bf616a>Background</span><span>(), </span><span style=color:#bf616a>time</span><span>.</span><span style=color:#bf616a>Second</span><span>)
+</span><span>	</span><span style=color:#b48ead>defer </span><span style=color:#bf616a>cancel</span><span>()
+</span><span>	</span><span style=color:#bf616a>r</span><span>, </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>c</span><span>.</span><span style=color:#bf616a>SayHello</span><span>(</span><span style=color:#bf616a>ctx</span><span>, &</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>HelloRequest</span><span>{</span><span style=color:#bf616a>Name</span><span>: *</span><span style=color:#bf616a>name</span><span>})
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#bf616a>log</span><span>.</span><span style=color:#bf616a>Fatalf</span><span>("</span><span style=color:#a3be8c>could not greet: </span><span style=color:#d08770>%v</span><span>", </span><span style=color:#bf616a>err</span><span>)
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>log</span><span>.</span><span style=color:#bf616a>Printf</span><span>("</span><span style=color:#a3be8c>Greeting: </span><span style=color:#d08770>%s</span><span>", </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>GetMessage</span><span>())
+</span><span>}
+</span></code></pre><p>可以看到，主要要关注两个函数调用以及一个方法调用，下面分别去了解它们。<h3 id=grpc-newclient><a aria-label="Anchor link for: grpc-newclient" class=zola-anchor href=#grpc-newclient>grpc.NewClient</a></h3><pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span style=color:#8fa1b3>NewClient</span><span>(</span><span style=color:#bf616a>target </span><span style=color:#b48ead>string</span><span>, </span><span style=color:#bf616a>opts </span><span>...</span><span style=color:#b48ead>DialOption</span><span>) (</span><span style=color:#bf616a>conn </span><span>*</span><span style=color:#b48ead>ClientConn</span><span>, </span><span style=color:#bf616a>err </span><span style=color:#b48ead>error</span><span>) {
+</span><span>	</span><span style=color:#bf616a>cc </span><span>:= &</span><span style=color:#bf616a>ClientConn</span><span>{
+</span><span>		</span><span style=color:#bf616a>target</span><span>: </span><span style=color:#bf616a>target</span><span>,
+</span><span>		</span><span style=color:#bf616a>conns</span><span>:  </span><span style=color:#96b5b4>make</span><span>(</span><span style=color:#b48ead>map</span><span>[*</span><span style=color:#b48ead>addrConn</span><span>]</span><span style=color:#b48ead>struct</span><span>{}),
+</span><span>		</span><span style=color:#bf616a>dopts</span><span>:  </span><span style=color:#bf616a>defaultDialOptions</span><span>(),
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#65737e>// Determine the resolver to use.
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>initParsedTargetAndResolverBuilder</span><span>(); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>    </span><span style=color:#65737e>// 通过解析 json，获取 ServiceConfig 配置
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>defaultServiceConfigRawJSON </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#bf616a>scpr </span><span>:= </span><span style=color:#bf616a>parseServiceConfig</span><span>(*</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>defaultServiceConfigRawJSON</span><span>, </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>maxCallAttempts</span><span>)
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>scpr</span><span>.</span><span style=color:#bf616a>Err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>fmt</span><span>.</span><span style=color:#bf616a>Errorf</span><span>("</span><span style=color:#d08770>%s</span><span style=color:#a3be8c>: </span><span style=color:#d08770>%v</span><span>", </span><span style=color:#bf616a>invalidDefaultServiceConfigErrPrefix</span><span>, </span><span style=color:#bf616a>scpr</span><span>.</span><span style=color:#bf616a>Err</span><span>)
+</span><span>		}
+</span><span>		</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>defaultServiceConfig</span><span>, </span><span style=color:#bf616a>_ </span><span>= </span><span style=color:#bf616a>scpr</span><span>.</span><span style=color:#bf616a>Config</span><span>.(*</span><span style=color:#b48ead>ServiceConfig</span><span>)
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>mkp </span><span>= </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>copts</span><span>.</span><span style=color:#bf616a>KeepaliveParams
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>csMgr </span><span>= </span><span style=color:#bf616a>newConnectivityStateManager</span><span>(</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>channelz</span><span>)
+</span><span>	</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>pickerWrapper </span><span>= </span><span style=color:#bf616a>newPickerWrapper</span><span>(</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>copts</span><span>.</span><span style=color:#bf616a>StatsHandlers</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>metricsRecorderList </span><span>= </span><span style=color:#bf616a>stats</span><span>.</span><span style=color:#bf616a>NewMetricsRecorderList</span><span>(</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>copts</span><span>.</span><span style=color:#bf616a>StatsHandlers</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>initIdleStateLocked</span><span>() </span><span style=color:#65737e>// Safe to call without the lock, since nothing else has a reference to cc.
+</span><span>	</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>idlenessMgr </span><span>= </span><span style=color:#bf616a>idle</span><span>.</span><span style=color:#bf616a>NewManager</span><span>((*</span><span style=color:#bf616a>idler</span><span>)(</span><span style=color:#bf616a>cc</span><span>), </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>idleTimeout</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>cc</span><span>, </span><span style=color:#d08770>nil
+</span><span>}
+</span></code></pre><p>上述代码省略了，配置的初始化，interceptor 的初始化以及证书，权限等，保留了我认为比较重要的部分。<p>从函数的参数，就可以明显感觉到 go 与 rust 的不同，rust 中如果有很多的配置项，较多会采用 <a href=https://en.wikipedia.org/wiki/Builder_pattern rel=noopener target=_blank><code>builder pattern</code></a> 的方式，go 初始化 gRPC client 就稍微随意一些了。注意 <code>DailOption</code> 是一个 <code>interface</code>。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>type </span><span>ClientConn </span><span style=color:#b48ead>struct </span><span>{
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#bf616a>target              </span><span style=color:#b48ead>string            </span><span style=color:#65737e>// User's dial target.
+</span><span>	</span><span style=color:#bf616a>parsedTarget        resolver</span><span>.</span><span style=color:#b48ead>Target   </span><span style=color:#65737e>// 通过 target 构造的 URL
+</span><span>	</span><span style=color:#bf616a>authority           </span><span style=color:#b48ead>string            </span><span style=color:#65737e>// See initAuthority().
+</span><span>	</span><span style=color:#bf616a>dopts               </span><span style=color:#b48ead>dialOptions       </span><span style=color:#65737e>// Default and user specified dial options.
+</span><span>	</span><span style=color:#bf616a>channelz            </span><span>*</span><span style=color:#bf616a>channelz</span><span>.</span><span style=color:#b48ead>Channel </span><span style=color:#65737e>// Channelz object.
+</span><span>	</span><span style=color:#bf616a>resolverBuilder     resolver</span><span>.</span><span style=color:#b48ead>Builder  </span><span style=color:#65737e>// See initParsedTargetAndResolverBuilder().
+</span><span>	</span><span style=color:#bf616a>idlenessMgr         </span><span>*</span><span style=color:#bf616a>idle</span><span>.</span><span style=color:#b48ead>Manager
+</span><span>	</span><span style=color:#bf616a>metricsRecorderList </span><span>*</span><span style=color:#bf616a>stats</span><span>.</span><span style=color:#b48ead>MetricsRecorderList
+</span><span>
+</span><span>	</span><span style=color:#bf616a>csMgr              </span><span>*</span><span style=color:#b48ead>connectivityStateManager
+</span><span>	</span><span style=color:#bf616a>pickerWrapper      </span><span>*</span><span style=color:#b48ead>pickerWrapper
+</span><span>
+</span><span>	</span><span style=color:#65737e>// mu protects the following fields.
+</span><span>	</span><span style=color:#65737e>// TODO: split mu so the same mutex isn't used for everything.
+</span><span>	</span><span style=color:#bf616a>mu              sync</span><span>.</span><span style=color:#b48ead>RWMutex
+</span><span>	</span><span style=color:#bf616a>resolverWrapper </span><span>*</span><span style=color:#b48ead>ccResolverWrapper         </span><span style=color:#65737e>// Always recreated whenever entering idle to simplify Close.
+</span><span>	</span><span style=color:#bf616a>balancerWrapper </span><span>*</span><span style=color:#b48ead>ccBalancerWrapper         </span><span style=color:#65737e>// Always recreated whenever entering idle to simplify Close.
+</span><span>	</span><span style=color:#bf616a>sc              </span><span>*</span><span style=color:#b48ead>ServiceConfig             </span><span style=color:#65737e>// Latest service config received from the resolver.
+</span><span>	</span><span style=color:#bf616a>conns           </span><span style=color:#b48ead>map</span><span>[*</span><span style=color:#b48ead>addrConn</span><span>]</span><span style=color:#b48ead>struct</span><span>{}     </span><span style=color:#65737e>// Set to nil on close.
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>}
+</span></code></pre><p>上面列举 <code>ClientConn</code> 结构包含的一些字段，其中：<ul><li>resolverBuilder：是用来构造 resolver 对象<li>pickerWrapper：是 load balance 的 handle，通过这个去获取一个底层连接<li>resolverWrapper：服务发现的接口包装，grpc-go 内置实现了 dns<li>balancerWrapper：load balance 的接口包装，<code>grpc-go</code> 内置实现了很多的 load balance 策略，可以通过配置选择具体那种策略，这里就要比 rust 的 tonic 灵活多了<li>conns：连接地址的集合</ul><pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>cc </span><span>*</span><span style=color:#b48ead>ClientConn</span><span>) </span><span style=color:#8fa1b3>initParsedTargetAndResolverBuilder</span><span>() </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#bf616a>logger</span><span>.</span><span style=color:#bf616a>Infof</span><span>("</span><span style=color:#a3be8c>original dial target is: </span><span style=color:#d08770>%q</span><span>", </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>target</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#b48ead>var </span><span style=color:#bf616a>rb resolver</span><span>.</span><span style=color:#b48ead>Builder
+</span><span>	</span><span style=color:#bf616a>parsedTarget</span><span>, </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>parseTarget</span><span>(</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>target</span><span>)
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#bf616a>rb </span><span>= </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>getResolver</span><span>(</span><span style=color:#bf616a>parsedTarget</span><span>.</span><span style=color:#bf616a>URL</span><span>.</span><span style=color:#bf616a>Scheme</span><span>)
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>rb </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>parsedTarget </span><span>= </span><span style=color:#bf616a>parsedTarget
+</span><span>			</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>resolverBuilder </span><span>= </span><span style=color:#bf616a>rb
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>		}
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// We are here because the user's dial target did not contain a scheme or
+</span><span>	</span><span style=color:#65737e>// specified an unregistered scheme. We should fallback to the default
+</span><span>	</span><span style=color:#65737e>// scheme, except when a custom dialer is specified in which case, we should
+</span><span>	</span><span style=color:#65737e>// always use passthrough scheme. For either case, we need to respect any overridden
+</span><span>	</span><span style=color:#65737e>// global defaults set by the user.
+</span><span>	</span><span style=color:#bf616a>defScheme </span><span>:= </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>defaultScheme
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>internal</span><span>.</span><span style=color:#bf616a>UserSetDefaultScheme </span><span>{
+</span><span>		</span><span style=color:#bf616a>defScheme </span><span>= </span><span style=color:#bf616a>resolver</span><span>.</span><span style=color:#bf616a>GetDefaultScheme</span><span>()
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#bf616a>canonicalTarget </span><span>:= </span><span style=color:#bf616a>defScheme </span><span>+ "</span><span style=color:#a3be8c>:///</span><span>" + </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>target
+</span><span>
+</span><span>	</span><span style=color:#bf616a>parsedTarget</span><span>, </span><span style=color:#bf616a>err </span><span>= </span><span style=color:#bf616a>parseTarget</span><span>(</span><span style=color:#bf616a>canonicalTarget</span><span>)
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>rb </span><span>= </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>getResolver</span><span>(</span><span style=color:#bf616a>parsedTarget</span><span>.</span><span style=color:#bf616a>URL</span><span>.</span><span style=color:#bf616a>Scheme</span><span>)
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>rb </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>fmt</span><span>.</span><span style=color:#bf616a>Errorf</span><span>("</span><span style=color:#a3be8c>could not get resolver for default scheme: </span><span style=color:#d08770>%q</span><span>", </span><span style=color:#bf616a>parsedTarget</span><span>.</span><span style=color:#bf616a>URL</span><span>.</span><span style=color:#bf616a>Scheme</span><span>)
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>parsedTarget </span><span>= </span><span style=color:#bf616a>parsedTarget
+</span><span>	</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>resolverBuilder </span><span>= </span><span style=color:#bf616a>rb
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>}
+</span></code></pre><p><code>ClientConn.initParsedTargetAndResolverBuilder</code> 方法解析传入的 tagert 地址，并根据地址的 schema 构建 <code>ResolverBuilder</code>，并存入 <code>ClientConn.resolverBuilder</code> 字段；<code>parseTarget</code> 函数会把一个合法的 target 解析成 <code>URL</code> 结构体并构造 <code>resolver.Target</code> 结构体，<code>ClientConn.getResolver</code> 方法通过 target 的 schema 先从传入的配置中查询是否有调用者实现的 <code>resolver.Builder</code>，否则就从默认的 <code>resolver.Builder</code> 中查询并返回，<code>grpc-go</code> 默认实现的 builder 有以下：<ul><li><code>dns</code>: internal/resolver/dns/dns_resolver.go<li><code>passthrough</code>: internal/resolver/passthrough/passthrough.go<li><code>unix/unix-abstract</code>: internal/resolver/unix/unix.go</ul><p><code>ClientConn.initIdleStateLocked</code> 方法会初始化 <code>resolverWrapper</code> 以及 <code>balancerWrapper</code> 字段分别用于包装 <code>resolver</code> 以及 <code>balancer</code>；<code>NewClient</code> 函数的主要作用就是初始化。<h3 id=pb-newgreeterclient><a aria-label="Anchor link for: pb-newgreeterclient" class=zola-anchor href=#pb-newgreeterclient>pb.NewGreeterClient</a></h3><p>这个函数返回了 <code>greeterClient</code> 对象，该对象实现了 <code>GreeterClient</code> interface，这里的逻辑都是 protobuf 自动生成的。<h3 id=c-sayhello><a aria-label="Anchor link for: c-sayhello" class=zola-anchor href=#c-sayhello>c.SayHello</a></h3><p>由于 <code>ClientConn</code> 分别在 <code>call.go</code> 以及 <code>stream.go</code> 文件中实现了 <code>Invoke</code> 和 <code>NewStream</code> 方法，因此 <code>ClientConn</code> 实现了 <code>ClientConnInterface</code> interface。因此有了以下调用：<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>c </span><span>*</span><span style=color:#b48ead>greeterClient</span><span>) </span><span style=color:#8fa1b3>SayHello</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>in </span><span>*</span><span style=color:#b48ead>HelloRequest</span><span>, </span><span style=color:#bf616a>opts </span><span>...</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#b48ead>CallOption</span><span>) (*</span><span style=color:#b48ead>HelloReply</span><span>, </span><span style=color:#b48ead>error</span><span>) {
+</span><span>	</span><span style=color:#bf616a>cOpts </span><span>:= </span><span style=color:#96b5b4>append</span><span>([]</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#bf616a>CallOption</span><span>{</span><span style=color:#bf616a>grpc</span><span>.</span><span style=color:#bf616a>StaticMethod</span><span>()}, </span><span style=color:#bf616a>opts</span><span>...)
+</span><span>	</span><span style=color:#bf616a>out </span><span>:= </span><span style=color:#96b5b4>new</span><span>(</span><span style=color:#b48ead>HelloReply</span><span>)
+</span><span>	</span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>c</span><span>.</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>Invoke</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>Greeter_SayHello_FullMethodName</span><span>, </span><span style=color:#bf616a>in</span><span>, </span><span style=color:#bf616a>out</span><span>, </span><span style=color:#bf616a>cOpts</span><span>...)
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>out</span><span>, </span><span style=color:#d08770>nil
+</span><span>}
+</span><span>
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>cc </span><span>*</span><span style=color:#b48ead>ClientConn</span><span>) </span><span style=color:#8fa1b3>Invoke</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>method </span><span style=color:#b48ead>string</span><span>, </span><span style=color:#bf616a>args</span><span>, </span><span style=color:#bf616a>reply </span><span style=color:#b48ead>any</span><span>, </span><span style=color:#bf616a>opts </span><span>...</span><span style=color:#b48ead>CallOption</span><span>) </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#65737e>// allow interceptor to see all applicable call options, which means those
+</span><span>	</span><span style=color:#65737e>// configured as defaults from dial option as well as per-call options
+</span><span>	</span><span style=color:#bf616a>opts </span><span>= </span><span style=color:#bf616a>combine</span><span>(</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>callOptions</span><span>, </span><span style=color:#bf616a>opts</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>unaryInt </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>unaryInt</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>method</span><span>, </span><span style=color:#bf616a>args</span><span>, </span><span style=color:#bf616a>reply</span><span>, </span><span style=color:#bf616a>cc</span><span>, </span><span style=color:#bf616a>invoke</span><span>, </span><span style=color:#bf616a>opts</span><span>...)
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>invoke</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>method</span><span>, </span><span style=color:#bf616a>args</span><span>, </span><span style=color:#bf616a>reply</span><span>, </span><span style=color:#bf616a>cc</span><span>, </span><span style=color:#bf616a>opts</span><span>...)
+</span><span>}
+</span><span>
+</span><span style=color:#b48ead>func </span><span style=color:#8fa1b3>invoke</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>method </span><span style=color:#b48ead>string</span><span>, </span><span style=color:#bf616a>req</span><span>, </span><span style=color:#bf616a>reply </span><span style=color:#b48ead>any</span><span>, </span><span style=color:#bf616a>cc </span><span>*</span><span style=color:#b48ead>ClientConn</span><span>, </span><span style=color:#bf616a>opts </span><span>...</span><span style=color:#b48ead>CallOption</span><span>) </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#bf616a>cs</span><span>, </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>newClientStream</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>unaryStreamDesc</span><span>, </span><span style=color:#bf616a>cc</span><span>, </span><span style=color:#bf616a>method</span><span>, </span><span style=color:#bf616a>opts</span><span>...)
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>cs</span><span>.</span><span style=color:#bf616a>SendMsg</span><span>(</span><span style=color:#bf616a>req</span><span>); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>cs</span><span>.</span><span style=color:#bf616a>RecvMsg</span><span>(</span><span style=color:#bf616a>reply</span><span>)
+</span><span>}
+</span></code></pre><p><code>SayHello</code> 方法调用到最后，可以清除的看到 <code>SendMsg</code> 以及 <code>RecvMsg</code> 的调用，分别是发送 request 以及接收 response。<h2 id=resolver><a aria-label="Anchor link for: resolver" class=zola-anchor href=#resolver>Resolver</a></h2><p><code>resolver</code> 是解析目标 server 地址的接口，通过 <code>resolver</code> 通知 <code>balancer</code> 底层 endpoint 的变化。<p>重要的结构体包括以下两个：<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#65737e>// State contains the current Resolver state relevant to the ClientConn.
+</span><span style=color:#b48ead>type </span><span>State </span><span style=color:#b48ead>struct </span><span>{
+</span><span>	</span><span style=color:#bf616a>Addresses </span><span>[]</span><span style=color:#b48ead>Address </span><span style=color:#65737e>// 最新的 server 地址信息
+</span><span>
+</span><span>	</span><span style=color:#bf616a>Endpoints </span><span>[]</span><span style=color:#b48ead>Endpoint </span><span style=color:#65737e>// 替代 Addresses
+</span><span>
+</span><span>	</span><span style=color:#bf616a>ServiceConfig </span><span>*</span><span style=color:#bf616a>serviceconfig</span><span>.</span><span style=color:#b48ead>ParseResult
+</span><span>
+</span><span>	</span><span style=color:#bf616a>Attributes </span><span>*</span><span style=color:#bf616a>attributes</span><span>.</span><span style=color:#b48ead>Attributes
+</span><span>}
+</span><span>
+</span><span style=color:#b48ead>type </span><span>Address </span><span style=color:#b48ead>struct </span><span>{
+</span><span>	</span><span style=color:#65737e>// Addr is the server address on which a connection will be established.
+</span><span>	</span><span style=color:#bf616a>Addr </span><span style=color:#b48ead>string
+</span><span>
+</span><span>	</span><span style=color:#bf616a>ServerName </span><span style=color:#b48ead>string
+</span><span>
+</span><span>	</span><span style=color:#bf616a>Attributes </span><span>*</span><span style=color:#bf616a>attributes</span><span>.</span><span style=color:#b48ead>Attributes
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>}
+</span></code></pre><p>重要的接口有：<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>type </span><span>ClientConn </span><span style=color:#b48ead>interface </span><span>{
+</span><span>	</span><span style=color:#8fa1b3>UpdateState</span><span>(</span><span style=color:#b48ead>State</span><span>) </span><span style=color:#b48ead>error
+</span><span>
+</span><span>	</span><span style=color:#8fa1b3>ReportError</span><span>(</span><span style=color:#b48ead>error</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#65737e>// Deprecated: Use UpdateState instead.
+</span><span>	</span><span style=color:#8fa1b3>NewAddress</span><span>(</span><span style=color:#bf616a>addresses </span><span>[]</span><span style=color:#b48ead>Address</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ParseServiceConfig parses the provided service config and returns an
+</span><span>	</span><span style=color:#65737e>// object that provides the parsed config.
+</span><span>	</span><span style=color:#8fa1b3>ParseServiceConfig</span><span>(</span><span style=color:#bf616a>serviceConfigJSON </span><span style=color:#b48ead>string</span><span>) *</span><span style=color:#bf616a>serviceconfig</span><span>.</span><span style=color:#b48ead>ParseResult
+</span><span>}
+</span><span>
+</span><span style=color:#65737e>// Resolver watches for the updates on the specified target.
+</span><span style=color:#65737e>// Updates include address updates and service config updates.
+</span><span style=color:#b48ead>type </span><span>Resolver </span><span style=color:#b48ead>interface </span><span>{
+</span><span>	</span><span style=color:#65737e>// ResolveNow will be called by gRPC to try to resolve the target name
+</span><span>	</span><span style=color:#65737e>// again. It's just a hint, resolver can ignore this if it's not necessary.
+</span><span>	</span><span style=color:#65737e>//
+</span><span>	</span><span style=color:#65737e>// It could be called multiple times concurrently.
+</span><span>	</span><span style=color:#8fa1b3>ResolveNow</span><span>(</span><span style=color:#b48ead>ResolveNowOptions</span><span>)
+</span><span>	</span><span style=color:#65737e>// Close closes the resolver.
+</span><span>	</span><span style=color:#8fa1b3>Close</span><span>()
+</span><span>}
+</span><span>
+</span><span style=color:#65737e>// Builder creates a resolver that will be used to watch name resolution updates.
+</span><span style=color:#b48ead>type </span><span>Builder </span><span style=color:#b48ead>interface </span><span>{
+</span><span>	</span><span style=color:#65737e>// Build creates a new resolver for the given target.
+</span><span>	</span><span style=color:#65737e>//
+</span><span>	</span><span style=color:#65737e>// gRPC dial calls Build synchronously, and fails if the returned error is
+</span><span>	</span><span style=color:#65737e>// not nil.
+</span><span>	</span><span style=color:#8fa1b3>Build</span><span>(</span><span style=color:#bf616a>target </span><span style=color:#b48ead>Target</span><span>, </span><span style=color:#bf616a>cc </span><span style=color:#b48ead>ClientConn</span><span>, </span><span style=color:#bf616a>opts </span><span style=color:#b48ead>BuildOptions</span><span>) (</span><span style=color:#b48ead>Resolver</span><span>, </span><span style=color:#b48ead>error</span><span>)
+</span><span>	</span><span style=color:#65737e>// Scheme returns the scheme supported by this resolver.  Scheme is defined
+</span><span>	</span><span style=color:#65737e>// at https://github.com/grpc/grpc/blob/master/doc/naming.md.  The returned
+</span><span>	</span><span style=color:#65737e>// string should not contain uppercase characters, as they will not match
+</span><span>	</span><span style=color:#65737e>// the parsed target's scheme as defined in RFC 3986.
+</span><span>	</span><span style=color:#8fa1b3>Scheme</span><span>() </span><span style=color:#b48ead>string
+</span><span>}
+</span></code></pre><p>可以参考 <code>examples/features/name_resolving/client/main.go</code> 给的🌰，传入自定义的 <code>resolver</code>；每个 <code>resolver</code> 需要实现上述的 <code>Builder</code> 以及 <code>Resolver</code> 接口；在上述的 <code>newClientStream</code> 函数中会调用 <code>Builder.Build</code> 方法，构造 <code>resolve</code>；<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span style=color:#8fa1b3>newClientStream</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>desc </span><span>*</span><span style=color:#b48ead>StreamDesc</span><span>, </span><span style=color:#bf616a>cc </span><span>*</span><span style=color:#b48ead>ClientConn</span><span>, </span><span style=color:#bf616a>method </span><span style=color:#b48ead>string</span><span>, </span><span style=color:#bf616a>opts </span><span>...</span><span style=color:#b48ead>CallOption</span><span>) (</span><span style=color:#bf616a>_ </span><span style=color:#b48ead>ClientStream</span><span>, </span><span style=color:#bf616a>err </span><span style=color:#b48ead>error</span><span>) {
+</span><span>	</span><span style=color:#65737e>// Start tracking the RPC for idleness purposes. This is where a stream is
+</span><span>	</span><span style=color:#65737e>// created for both streaming and unary RPCs, and hence is a good place to
+</span><span>	</span><span style=color:#65737e>// track active RPC count.
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>idlenessMgr</span><span>.</span><span style=color:#bf616a>OnCallBegin</span><span>(); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>newStream</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#b48ead>func</span><span>() {})
+</span><span>}
+</span></code></pre><p><code>ClientConn.idlenessMgr</code> 是管理 <code>ClientConn</code> 的状态的，不管是 gRPC unary request 还是 gRPC streaming reqeust 都会调用 <code>cc.idlenessMgr.OnCallBegin</code> 方法；在该方法中，会调用 <code>Manager.ExitIdleMode</code> 方法；最后调用 <code>m.enforcer.ExitIdleMode</code> 方法；<code>ExitIdleMode</code> 是接口 <code>Enforcer</code> 的其中一个方法；<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#65737e>// Enforcer is the functionality provided by grpc.ClientConn to enter
+</span><span style=color:#65737e>// and exit from idle mode.
+</span><span style=color:#b48ead>type </span><span>Enforcer </span><span style=color:#b48ead>interface </span><span>{
+</span><span>	</span><span style=color:#8fa1b3>ExitIdleMode</span><span>() </span><span style=color:#b48ead>error
+</span><span>	</span><span style=color:#8fa1b3>EnterIdleMode</span><span>()
+</span><span>}
+</span></code></pre><p>从注释中，可以得知 <code>Enforcer</code> 是管理 <code>ClientConn</code> 是否进入 idle mode 的接口；<ul><li><code>ExitIdleMode</code>：当 <code>ClientConn</code> 发起请求后，就会尝试退出 idle mode<li><code>EnterIdleMode</code>：当 <code>ClientConn</code> 在一定时间内（默认 30 分钟），没有请求；就会尝试进入 idle mode</ul><pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#65737e>// OnCallBegin is invoked at the start of every RPC.
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>m </span><span>*</span><span style=color:#b48ead>Manager</span><span>) </span><span style=color:#8fa1b3>OnCallBegin</span><span>() </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#65737e>// Channel is either in idle mode or is in the process of moving to idle
+</span><span>	</span><span style=color:#65737e>// mode. Attempt to exit idle mode to allow this RPC.
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>ExitIdleMode</span><span>(); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#65737e>// Undo the increment to calls count, and return an error causing the
+</span><span>		</span><span style=color:#65737e>// RPC to fail.
+</span><span>		</span><span style=color:#bf616a>atomic</span><span>.</span><span style=color:#bf616a>AddInt32</span><span>(&</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>activeCallsCount</span><span>, -</span><span style=color:#d08770>1</span><span>)
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>}
+</span><span>
+</span><span>
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>m </span><span>*</span><span style=color:#b48ead>Manager</span><span>) </span><span style=color:#8fa1b3>ExitIdleMode</span><span>() </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>    </span><span style=color:#65737e>// 退出 idle mode
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>enforcer</span><span>.</span><span style=color:#bf616a>ExitIdleMode</span><span>(); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>fmt</span><span>.</span><span style=color:#bf616a>Errorf</span><span>("</span><span style=color:#a3be8c>failed to exit idle mode: </span><span style=color:#d08770>%w</span><span>", </span><span style=color:#bf616a>err</span><span>)
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>    </span><span style=color:#65737e>// 启动定时器，当定时器超时就会进入 idle mode，
+</span><span>    </span><span style=color:#65737e>// 每次检查是否要进入 idle mode 时，就会判断是否有 RPC 调用，
+</span><span>    </span><span style=color:#65737e>// 如果有就重置定时器
+</span><span>	</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>resetIdleTimerLocked</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>timeout</span><span>)
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>}
+</span></code></pre><p>而在 <code>NewClient</code> 函数的最后，在初始化 <code>ClientConn.idlenessMgr</code> 字段时，把 <code>ClientConn</code> 对象断言成为 <code>idler</code> 对象，因此 <code>ClientConn</code> 就是实现了 <code>Enforcer</code> 接口的对象。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>type </span><span>idler </span><span style=color:#b48ead>ClientConn
+</span><span>
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>i </span><span>*</span><span style=color:#b48ead>idler</span><span>) </span><span style=color:#8fa1b3>ExitIdleMode</span><span>() </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#b48ead>return </span><span>(*</span><span style=color:#bf616a>ClientConn</span><span>)(</span><span style=color:#bf616a>i</span><span>).</span><span style=color:#bf616a>exitIdleMode</span><span>()
+</span><span>}
+</span><span>
+</span><span style=color:#65737e>// exitIdleMode moves the channel out of idle mode by recreating the name
+</span><span style=color:#65737e>// resolver and load balancer.  This should never be called directly; use
+</span><span style=color:#65737e>// cc.idlenessMgr.ExitIdleMode instead.
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>cc </span><span>*</span><span style=color:#b48ead>ClientConn</span><span>) </span><span style=color:#8fa1b3>exitIdleMode</span><span>() (</span><span style=color:#bf616a>err </span><span style=color:#b48ead>error</span><span>) {
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#65737e>// This needs to be called without cc.mu because this builds a new resolver
+</span><span>	</span><span style=color:#65737e>// which might update state or report error inline, which would then need to
+</span><span>	</span><span style=color:#65737e>// acquire cc.mu.
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>resolverWrapper</span><span>.</span><span style=color:#bf616a>start</span><span>(); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>addTraceEvent</span><span>("</span><span style=color:#a3be8c>exiting idle mode</span><span>")
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>}
+</span><span>
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>ccr </span><span>*</span><span style=color:#b48ead>ccResolverWrapper</span><span>) </span><span style=color:#8fa1b3>start</span><span>() </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#bf616a>errCh </span><span>:= </span><span style=color:#96b5b4>make</span><span>(</span><span style=color:#b48ead>chan error</span><span>)
+</span><span>	</span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>serializer</span><span>.</span><span style=color:#bf616a>TrySchedule</span><span>(</span><span style=color:#b48ead>func</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>) {
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ctx</span><span>.</span><span style=color:#bf616a>Err</span><span>() != </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#b48ead>return
+</span><span>		}
+</span><span>		</span><span style=color:#bf616a>opts </span><span>:= </span><span style=color:#bf616a>resolver</span><span>.</span><span style=color:#bf616a>BuildOptions</span><span>{
+</span><span>			</span><span style=color:#bf616a>DisableServiceConfig</span><span>: </span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>disableServiceConfig</span><span>,
+</span><span>			</span><span style=color:#bf616a>DialCreds</span><span>:            </span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>copts</span><span>.</span><span style=color:#bf616a>TransportCredentials</span><span>,
+</span><span>			</span><span style=color:#bf616a>CredsBundle</span><span>:          </span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>copts</span><span>.</span><span style=color:#bf616a>CredsBundle</span><span>,
+</span><span>			</span><span style=color:#bf616a>Dialer</span><span>:               </span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>copts</span><span>.</span><span style=color:#bf616a>Dialer</span><span>,
+</span><span>			</span><span style=color:#bf616a>Authority</span><span>:            </span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>authority</span><span>,
+</span><span>		}
+</span><span>		</span><span style=color:#b48ead>var </span><span style=color:#bf616a>err </span><span style=color:#b48ead>error
+</span><span>		</span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>resolver</span><span>, </span><span style=color:#bf616a>err </span><span>= </span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>resolverBuilder</span><span>.</span><span style=color:#bf616a>Build</span><span>(</span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>parsedTarget</span><span>, </span><span style=color:#bf616a>ccr</span><span>, </span><span style=color:#bf616a>opts</span><span>)
+</span><span>		</span><span style=color:#bf616a>errCh </span><span>&lt;- </span><span style=color:#bf616a>err
+</span><span>	})
+</span><span>	</span><span style=color:#b48ead>return </span><span>&lt;-</span><span style=color:#bf616a>errCh
+</span><span>}
+</span></code></pre><p>在 <code>cc.resolverWrapper.start</code> 方法中会调用 <code>resolver</code> 实现的 <code>Build</code> 方法并赋值给 <code>ccResolverWrapper.resolver</code> 字段。并且在 <code>Build</code> 方法的调用中，在解析完 target server 地址后，会调用 <code>resolver</code> package 中 <code>ClientConn</code> 接口中的 <code>UpdateState</code> 方法来更新底层 endpoint，而实现 <code>ClientConn</code> 接口的就是 <code>ccResolverWrapper</code> 对象。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>ccr </span><span>*</span><span style=color:#b48ead>ccResolverWrapper</span><span>) </span><span style=color:#8fa1b3>UpdateState</span><span>(</span><span style=color:#bf616a>s resolver</span><span>.</span><span style=color:#b48ead>State</span><span>) </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>mu</span><span>.</span><span style=color:#bf616a>Lock</span><span>()
+</span><span>	</span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>mu</span><span>.</span><span style=color:#bf616a>Lock</span><span>()
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>closed </span><span>{
+</span><span>		</span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>mu</span><span>.</span><span style=color:#bf616a>Unlock</span><span>()
+</span><span>		</span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>mu</span><span>.</span><span style=color:#bf616a>Unlock</span><span>()
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>Endpoints </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>Endpoints </span><span>= </span><span style=color:#96b5b4>make</span><span>([]</span><span style=color:#bf616a>resolver</span><span>.</span><span style=color:#b48ead>Endpoint</span><span>, </span><span style=color:#d08770>0</span><span>, </span><span style=color:#96b5b4>len</span><span>(</span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>Addresses</span><span>))
+</span><span>		</span><span style=color:#b48ead>for </span><span style=color:#bf616a>_</span><span>, </span><span style=color:#bf616a>a </span><span>:= </span><span style=color:#b48ead>range </span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>Addresses </span><span>{
+</span><span>			</span><span style=color:#bf616a>ep </span><span>:= </span><span style=color:#bf616a>resolver</span><span>.</span><span style=color:#bf616a>Endpoint</span><span>{</span><span style=color:#bf616a>Addresses</span><span>: []</span><span style=color:#bf616a>resolver</span><span>.</span><span style=color:#bf616a>Address</span><span>{</span><span style=color:#bf616a>a</span><span>}, </span><span style=color:#bf616a>Attributes</span><span>: </span><span style=color:#bf616a>a</span><span>.</span><span style=color:#bf616a>BalancerAttributes</span><span>}
+</span><span>			</span><span style=color:#bf616a>ep</span><span>.</span><span style=color:#bf616a>Addresses</span><span>[</span><span style=color:#d08770>0</span><span>].</span><span style=color:#bf616a>BalancerAttributes </span><span>= </span><span style=color:#d08770>nil
+</span><span>			</span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>Endpoints </span><span>= </span><span style=color:#96b5b4>append</span><span>(</span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>Endpoints</span><span>, </span><span style=color:#bf616a>ep</span><span>)
+</span><span>		}
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>addChannelzTraceEvent</span><span>(</span><span style=color:#bf616a>s</span><span>)
+</span><span>	</span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>curState </span><span>= </span><span style=color:#bf616a>s
+</span><span>	</span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>mu</span><span>.</span><span style=color:#bf616a>Unlock</span><span>()
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ccr</span><span>.</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>updateResolverStateAndUnlock</span><span>(</span><span style=color:#bf616a>s</span><span>, </span><span style=color:#d08770>nil</span><span>)
+</span><span>}
+</span></code></pre><p>到这里，<code>resolver</code> 的任务就基本完成了，后面就是 <code>balancer</code> 以及 <code>picker</code> 的工作。</section></article></main></div></div><div class=right-content><div class=toc><div class=heading>Table of Contents</div><ul class=toc-list><li class=parent><a href=https://wiserfz.github.io/posts/grpc-go-resolver/#qian-yan>前言</a><li class=parent><a href=https://wiserfz.github.io/posts/grpc-go-resolver/#grpc-go>grpc-go</a> <ul><li><a href=https://wiserfz.github.io/posts/grpc-go-resolver/#grpc-newclient>grpc.NewClient</a><li><a href=https://wiserfz.github.io/posts/grpc-go-resolver/#pb-newgreeterclient>pb.NewGreeterClient</a><li><a href=https://wiserfz.github.io/posts/grpc-go-resolver/#c-sayhello>c.SayHello</a></ul><li class=parent><a href=https://wiserfz.github.io/posts/grpc-go-resolver/#resolver>Resolver</a></ul></div></div>

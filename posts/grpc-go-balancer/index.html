@@ -1,0 +1,188 @@
+<!doctype html><html class="dark light" lang=en><head><meta charset=UTF-8><meta content="IE=edge" http-equiv=X-UA-Compatible><meta content="width=device-width,initial-scale=1.0" name=viewport><meta content=https://wiserfz.github.io name=base><title>
+            
+                gRPC go - balancer
+            
+        </title><meta content="gRPC go - balancer" property=og:title><meta content="Source code of grpc-go." property=og:description><meta content="Source code of grpc-go." name=description><link href=https://wiserfz.github.io/img/favicons/favicon.ico rel=icon type=image/png><link href=https://wiserfz.github.io/fonts.css rel=stylesheet><script defer src=https://wiserfz.github.io/js/codeblock.js></script><script defer src=https://wiserfz.github.io/js/toc.js></script><script>MathJax = {
+                    tex: {
+                        inlineMath: [
+                            ['$', '$'],
+                            ['\\(', '\\)']
+                        ]
+                    }
+                };</script><script async id=MathJax-script src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/atom.xml rel=alternate type=application/atom+xml><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/rss.xml rel=alternate type=application/rss+xml><link href=https://wiserfz.github.io/theme/light.css rel=stylesheet><link href=https://wiserfz.github.io/theme/dark.css id=darkModeStyle rel=stylesheet><script src=https://wiserfz.github.io/js/themetoggle.js></script><script>setTheme(getSavedTheme());</script><link href=https://wiserfz.github.io/main.css media=screen rel=stylesheet><script src="https://wiserfz.github.io/search_index.en.js?h=83f808dfc552363cb1ef" defer></script><script src="https://wiserfz.github.io/js/searchElasticlunr.min.js?h=3626c0ef99daa745b31e" defer></script><body><div class=left-content></div><div class=content><nav><div class=left-nav><a href=https://wiserfz.github.io>wiser's blog</a><div class=socials><a rel="'me" target="'_blank'" class=social href=https://wiserfz.github.io/rss.xml noopener&#x27;> <img alt=rss src=https://wiserfz.github.io/icons/social/rss.svg> </a><a rel="'me" target="'_blank'" class=social href=mailto:wiserfz810@gmail.com noopener&#x27;> <img alt=email src=https://wiserfz.github.io/icons/social/email.svg> </a><a rel="'me" target="'_blank'" class=social href=https://github.com/wiserfz/ noopener&#x27;> <img alt=github src=https://wiserfz.github.io/icons/social/github.svg> </a></div></div><div class=right-nav><a href=https://wiserfz.github.io style=margin-right:.5em>/home</a><a href=https://wiserfz.github.io/posts style=margin-right:.5em>/posts</a><a href=https://wiserfz.github.io/tags style=margin-right:.5em>/tags</a><a href=https://wiserfz.github.io/about style=margin-right:.5em>/about</a><button title="$SHORTCUT to open search" class=search-button id=search-button><img alt=Search class=search-icon src=https://wiserfz.github.io/icons/search.svg></button><div class="search-modal js" aria-labelledby=modalTitle id=searchModal role=dialog><div id=modal-content><h1 class=page-header id=modalTitle>Search</h1><div id=searchBar><input aria-controls=results-container aria-expanded=false autocomplete=off id=searchInput placeholder=Search... role=combobox spellcheck=false><button title="Clear search" class=clear-button id=clear-search><svg viewbox="0 -960 960 960" xmlns=http://www.w3.org/2000/svg><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg></button></div><div id=results-container><div id=results-info><span id=zero_results style=display:none>No results</span><span id=one_result style=display:none>1 result</span><span id=many_results style=display:none>$NUMBER results</span></div><div id=results role=listbox></div></div></div></div><a onclick="toggleTheme(); event.preventDefault();" href=# id=dark-mode-toggle> <img alt=Light id=sun-icon src=https://wiserfz.github.io/icons/sun.svg style=filter:invert()> <img alt=Dark id=moon-icon src=https://wiserfz.github.io/icons/moon.svg> </a><script>updateItemToggleTheme()</script></div></nav><div data-selector="main article p" class=visible-element-observer-root><main><article><div class=title><div class=page-header>gRPC go - balancer</div><div class=meta>Posted on <time>2024-10-19</time><span class=tags-label>::</span><span class=tags> <a class=post-tag href=https://wiserfz.github.io/tags/grpc/>gRPC</a> <a class=post-tag href=https://wiserfz.github.io/tags/code/>code</a> </span></div></div><section class=body><h2 id=qian-yan><a aria-label="Anchor link for: qian-yan" class=zola-anchor href=#qian-yan>前言</a></h2><p>上篇文章分析了 <code>grpc-go</code> 库中的整体流程以及 <code>resolver</code> 的构建以及如何解析服务地址，具体可以看<a href=/posts/client-of-grpc-in-go-resolver/>这里</a>。<p>这篇将继续分析 <code>grpc-go</code> 中 balancer 是如何实现以及使用的。<h2 id=balancer><a aria-label="Anchor link for: balancer" class=zola-anchor href=#balancer>Balancer</a></h2><script src=https://wiserfz.github.io/js/mermaid.js></script><pre class=mermaid>
+  sequenceDiagram
+    participant ccrw as ccResolverWrapper
+    participant cc as ClinetConn
+    participant ccbw as ccBalancerWrapper
+    participant Balancer
+    participant pfb as pickfirstBuilder
+    participant pf as pickfirstBalancer
+    participant bw as balancerWrapper
+    participant acbw as acBalancerWrapper
+    participant pw as pickerWrapper
+    participant ac as addrConn
+
+    autonumber
+    ccrw->>cc: updateResolverStateAndUnlock(...)
+    cc->>ccbw: updateClientConnState(...)
+    ccbw->>Balancer: UpdateClientConnState(...)
+    Balancer->>Balancer: switchTo(...)
+    Balancer->>pfb: balancer.Builder.Build(...)
+    Balancer->>pf: balancer.Balancer.UpdateClientConnState(...)
+    pf->>bw: balancer.ClientConn.NewSubConn(...)
+    bw->>ccbw: balancer.ClientConn.NewSubConn(...)
+    pf->>bw: balancer.ClientConn.UpdateState(...)
+    bw->>ccbw: balancer.ClientConn.UpdateState(...)
+    ccbw->>pw: updatePicker(...)
+    pf->>acbw: Connect(...)
+    acbw->>ac: go acbw.ac.connect()<br>try all addresses to build HTTP2 connection
+</pre><p>resolver 解析 target server 地址后，会通过 <code>ccResolverWrapper</code> 实现的 <code>resolver.ClientConn</code> 接口的 <code>UpdateState</code> 方法调用 <code>ClientConn.updateResolverStateAndUnlock</code> 方法，该方法会通过解析 <code>ServiceConfig</code> 判断使用的 load balance 策略，默认是用 <code>FirstPick</code> 策略。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>cc </span><span>*</span><span style=color:#b48ead>ClientConn</span><span>) </span><span style=color:#8fa1b3>updateResolverStateAndUnlock</span><span>(</span><span style=color:#bf616a>s resolver</span><span>.</span><span style=color:#b48ead>State</span><span>, </span><span style=color:#bf616a>err </span><span style=color:#b48ead>error</span><span>) </span><span style=color:#b48ead>error </span><span>{
+</span><span>    </span><span style=color:#65737e>// ...
+</span><span>
+</span><span>    </span><span style=color:#65737e>// 解析配置，决定 load balance 策略
+</span><span>	</span><span style=color:#b48ead>var </span><span style=color:#bf616a>ret </span><span style=color:#b48ead>error
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>disableServiceConfig </span><span>{
+</span><span>		</span><span style=color:#bf616a>channelz</span><span>.</span><span style=color:#bf616a>Infof</span><span>(</span><span style=color:#bf616a>logger</span><span>, </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>channelz</span><span>, "</span><span style=color:#a3be8c>ignoring service config from resolver (</span><span style=color:#d08770>%v</span><span style=color:#a3be8c>) and applying the default because service config is disabled</span><span>", </span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>ServiceConfig</span><span>)
+</span><span>		</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>maybeApplyDefaultServiceConfig</span><span>()
+</span><span>	} </span><span style=color:#b48ead>else if </span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>ServiceConfig </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>maybeApplyDefaultServiceConfig</span><span>()
+</span><span>		</span><span style=color:#65737e>// TODO: do we need to apply a failing LB policy if there is no
+</span><span>		</span><span style=color:#65737e>// default, per the error handling design?
+</span><span>	} </span><span style=color:#b48ead>else </span><span>{
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>sc</span><span>, </span><span style=color:#bf616a>ok </span><span>:= </span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>ServiceConfig</span><span>.</span><span style=color:#bf616a>Config</span><span>.(*</span><span style=color:#b48ead>ServiceConfig</span><span>); </span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>ServiceConfig</span><span>.</span><span style=color:#bf616a>Err </span><span>== </span><span style=color:#d08770>nil </span><span>&& </span><span style=color:#bf616a>ok </span><span>{
+</span><span>			</span><span style=color:#bf616a>configSelector </span><span>:= </span><span style=color:#bf616a>iresolver</span><span>.</span><span style=color:#bf616a>GetConfigSelector</span><span>(</span><span style=color:#bf616a>s</span><span>)
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>configSelector </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>				</span><span style=color:#b48ead>if </span><span style=color:#96b5b4>len</span><span>(</span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>ServiceConfig</span><span>.</span><span style=color:#bf616a>Config</span><span>.(*</span><span style=color:#b48ead>ServiceConfig</span><span>).</span><span style=color:#bf616a>Methods</span><span>) != </span><span style=color:#d08770>0 </span><span>{
+</span><span>					</span><span style=color:#bf616a>channelz</span><span>.</span><span style=color:#bf616a>Infof</span><span>(</span><span style=color:#bf616a>logger</span><span>, </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>channelz</span><span>, "</span><span style=color:#a3be8c>method configs in service config will be ignored due to presence of config selector</span><span>")
+</span><span>				}
+</span><span>			} </span><span style=color:#b48ead>else </span><span>{
+</span><span>				</span><span style=color:#bf616a>configSelector </span><span>= &</span><span style=color:#bf616a>defaultConfigSelector</span><span>{</span><span style=color:#bf616a>sc</span><span>}
+</span><span>			}
+</span><span>			</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>applyServiceConfigAndBalancer</span><span>(</span><span style=color:#bf616a>sc</span><span>, </span><span style=color:#bf616a>configSelector</span><span>)
+</span><span>		} </span><span style=color:#b48ead>else </span><span>{
+</span><span>			</span><span style=color:#bf616a>ret </span><span>= </span><span style=color:#bf616a>balancer</span><span>.</span><span style=color:#bf616a>ErrBadResolverState
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>sc </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>				</span><span style=color:#65737e>// Apply the failing LB only if we haven't received valid service config
+</span><span>				</span><span style=color:#65737e>// from the name resolver in the past.
+</span><span>				</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>applyFailingLBLocked</span><span>(</span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>ServiceConfig</span><span>)
+</span><span>				</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>mu</span><span>.</span><span style=color:#bf616a>Unlock</span><span>()
+</span><span>				</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ret
+</span><span>			}
+</span><span>		}
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#bf616a>balCfg </span><span>:= </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>sc</span><span>.</span><span style=color:#bf616a>lbConfig
+</span><span>	</span><span style=color:#bf616a>bw </span><span>:= </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>balancerWrapper
+</span><span>	</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>mu</span><span>.</span><span style=color:#bf616a>Unlock</span><span>()
+</span><span>
+</span><span>	</span><span style=color:#bf616a>uccsErr </span><span>:= </span><span style=color:#bf616a>bw</span><span>.</span><span style=color:#bf616a>updateClientConnState</span><span>(&</span><span style=color:#bf616a>balancer</span><span>.</span><span style=color:#bf616a>ClientConnState</span><span>{</span><span style=color:#bf616a>ResolverState</span><span>: </span><span style=color:#bf616a>s</span><span>, </span><span style=color:#bf616a>BalancerConfig</span><span>: </span><span style=color:#bf616a>balCfg</span><span>})
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ret </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#bf616a>ret </span><span>= </span><span style=color:#bf616a>uccsErr </span><span style=color:#65737e>// prefer ErrBadResolver state since any other error is
+</span><span>		</span><span style=color:#65737e>// currently meaningless to the caller.
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ret
+</span><span>}
+</span><span>
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>gsb </span><span>*</span><span style=color:#b48ead>Balancer</span><span>) </span><span style=color:#8fa1b3>UpdateClientConnState</span><span>(</span><span style=color:#bf616a>state balancer</span><span>.</span><span style=color:#b48ead>ClientConnState</span><span>) </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#65737e>// The resolver data is only relevant to the most recent LB Policy.
+</span><span>	</span><span style=color:#bf616a>balToUpdate </span><span>:= </span><span style=color:#bf616a>gsb</span><span>.</span><span style=color:#bf616a>latestBalancer</span><span>()
+</span><span>	</span><span style=color:#bf616a>gsbCfg</span><span>, </span><span style=color:#bf616a>ok </span><span>:= </span><span style=color:#bf616a>state</span><span>.</span><span style=color:#bf616a>BalancerConfig</span><span>.(*</span><span style=color:#b48ead>lbConfig</span><span>)
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ok </span><span>{
+</span><span>		</span><span style=color:#65737e>// Switch to the child in the config unless it is already active.
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>balToUpdate </span><span>== </span><span style=color:#d08770>nil </span><span>|| </span><span style=color:#bf616a>gsbCfg</span><span>.</span><span style=color:#bf616a>childBuilder</span><span>.</span><span style=color:#bf616a>Name</span><span>() != </span><span style=color:#bf616a>balToUpdate</span><span>.</span><span style=color:#bf616a>builder</span><span>.</span><span style=color:#bf616a>Name</span><span>() {
+</span><span>			</span><span style=color:#b48ead>var </span><span style=color:#bf616a>err </span><span style=color:#b48ead>error
+</span><span>			</span><span style=color:#bf616a>balToUpdate</span><span>, </span><span style=color:#bf616a>err </span><span>= </span><span style=color:#bf616a>gsb</span><span>.</span><span style=color:#bf616a>switchTo</span><span>(</span><span style=color:#bf616a>gsbCfg</span><span>.</span><span style=color:#bf616a>childBuilder</span><span>)
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>				</span><span style=color:#b48ead>return </span><span style=color:#bf616a>fmt</span><span>.</span><span style=color:#bf616a>Errorf</span><span>("</span><span style=color:#a3be8c>could not switch to new child balancer: </span><span style=color:#d08770>%w</span><span>", </span><span style=color:#bf616a>err</span><span>)
+</span><span>			}
+</span><span>		}
+</span><span>		</span><span style=color:#65737e>// Unwrap the child balancer's config.
+</span><span>		</span><span style=color:#bf616a>state</span><span>.</span><span style=color:#bf616a>BalancerConfig </span><span>= </span><span style=color:#bf616a>gsbCfg</span><span>.</span><span style=color:#bf616a>childConfig
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>balToUpdate </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>errBalancerClosed
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// Perform this call without gsb.mu to prevent deadlocks if the child calls
+</span><span>	</span><span style=color:#65737e>// back into the channel. The latest balancer can never be closed during a
+</span><span>	</span><span style=color:#65737e>// call from the channel, even without gsb.mu held.
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>balToUpdate</span><span>.</span><span style=color:#bf616a>UpdateClientConnState</span><span>(</span><span style=color:#bf616a>state</span><span>)
+</span><span>}
+</span></code></pre><p><code>gsb.switchTo</code> 方法会调用 <code>balancer.Builder.build</code> 方法，创建 load balance，即 <code>FirstPick</code> load balance，balancer 需要实现 <code>balance.Balancer</code> 接口，然后就会调用 <code>balance.Balancer.UpdateClientConnState</code> 方法，来处理从 resolver 解析过来的地址，每种 load balance 实现的策略不同，因此该方法的实现逻辑也各不相同；以 <code>FirstPick</code> load balance 为例，主要有以下调用：<ol><li>调用 <code>balancer.ClientConn.NewSubConn</code> 方法创建 <code>acBalancerWrapper</code> 对象<li>初始化 <code>picker</code>，调用 <code>Balancer.ClientConn.UpdateState</code> 方法设置 <code>ClientConn.pickerWrapper</code> 字段<li>调用 <code>balancer.SubConn.Connect</code> 方法建立连接</ol><p>具体的代码调用，可以参考时序图中的方法调用查看，这里就不一一贴出来了。<h2 id=newclientstream><a aria-label="Anchor link for: newclientstream" class=zola-anchor href=#newclientstream>newClientStream</a></h2><pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span style=color:#8fa1b3>newClientStream</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>desc </span><span>*</span><span style=color:#b48ead>StreamDesc</span><span>, </span><span style=color:#bf616a>cc </span><span>*</span><span style=color:#b48ead>ClientConn</span><span>, </span><span style=color:#bf616a>method </span><span style=color:#b48ead>string</span><span>, </span><span style=color:#bf616a>opts </span><span>...</span><span style=color:#b48ead>CallOption</span><span>) (</span><span style=color:#bf616a>_ </span><span style=color:#b48ead>ClientStream</span><span>, </span><span style=color:#bf616a>err </span><span style=color:#b48ead>error</span><span>) {
+</span><span>    </span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#65737e>// Provide an opportunity for the first RPC to see the first service config
+</span><span>	</span><span style=color:#65737e>// provided by the resolver.
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>waitForResolvedAddrs</span><span>(</span><span style=color:#bf616a>ctx</span><span>); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#b48ead>var </span><span style=color:#bf616a>mc serviceconfig</span><span>.</span><span style=color:#b48ead>MethodConfig
+</span><span>	</span><span style=color:#b48ead>var </span><span style=color:#bf616a>onCommit </span><span style=color:#b48ead>func</span><span>()
+</span><span>	</span><span style=color:#bf616a>newStream </span><span>:= </span><span style=color:#b48ead>func</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>done </span><span style=color:#b48ead>func</span><span>()) (</span><span style=color:#bf616a>iresolver</span><span>.</span><span style=color:#b48ead>ClientStream</span><span>, </span><span style=color:#b48ead>error</span><span>) {
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>newClientStreamWithParams</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>desc</span><span>, </span><span style=color:#bf616a>cc</span><span>, </span><span style=color:#bf616a>method</span><span>, </span><span style=color:#bf616a>mc</span><span>, </span><span style=color:#bf616a>onCommit</span><span>, </span><span style=color:#bf616a>done</span><span>, </span><span style=color:#bf616a>opts</span><span>...)
+</span><span>	}
+</span><span>
+</span><span>    </span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>newStream</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#b48ead>func</span><span>() {})
+</span><span>}
+</span></code></pre><p><code>newClientStream</code> 在初始化 <code>balancer</code> 以及 <code>picker</code> 后，由于 <code>resolver</code> 解析 server 地址是异步的，因此通过 <code>ClientConn.waitForResolvedAddrs</code> 方法，保证底层连接建立成功。然后通过 <code>newClientStreamWithParams</code> 方法建立 HTTP2 stream。<h2 id=newclientstreamwithparams><a aria-label="Anchor link for: newclientstreamwithparams" class=zola-anchor href=#newclientstreamwithparams>newClientStreamWithParams</a></h2><pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span style=color:#8fa1b3>newClientStreamWithParams</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>desc </span><span>*</span><span style=color:#b48ead>StreamDesc</span><span>, </span><span style=color:#bf616a>cc </span><span>*</span><span style=color:#b48ead>ClientConn</span><span>, </span><span style=color:#bf616a>method </span><span style=color:#b48ead>string</span><span>, </span><span style=color:#bf616a>mc serviceconfig</span><span>.</span><span style=color:#b48ead>MethodConfig</span><span>, </span><span style=color:#bf616a>onCommit</span><span>, </span><span style=color:#bf616a>doneFunc </span><span style=color:#b48ead>func</span><span>(), </span><span style=color:#bf616a>opts </span><span>...</span><span style=color:#b48ead>CallOption</span><span>) (</span><span style=color:#bf616a>_ iresolver</span><span>.</span><span style=color:#b48ead>ClientStream</span><span>, </span><span style=color:#bf616a>err </span><span style=color:#b48ead>error</span><span>) {
+</span><span>    </span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#bf616a>cs </span><span>:= &</span><span style=color:#bf616a>clientStream</span><span>{
+</span><span>		</span><span style=color:#bf616a>callHdr</span><span>:      </span><span style=color:#bf616a>callHdr</span><span>,
+</span><span>		</span><span style=color:#bf616a>ctx</span><span>:          </span><span style=color:#bf616a>ctx</span><span>,
+</span><span>		</span><span style=color:#bf616a>methodConfig</span><span>: &</span><span style=color:#bf616a>mc</span><span>,
+</span><span>		</span><span style=color:#bf616a>opts</span><span>:         </span><span style=color:#bf616a>opts</span><span>,
+</span><span>		</span><span style=color:#bf616a>callInfo</span><span>:     </span><span style=color:#bf616a>c</span><span>,
+</span><span>		</span><span style=color:#bf616a>cc</span><span>:           </span><span style=color:#bf616a>cc</span><span>,
+</span><span>		</span><span style=color:#bf616a>desc</span><span>:         </span><span style=color:#bf616a>desc</span><span>,
+</span><span>		</span><span style=color:#bf616a>codec</span><span>:        </span><span style=color:#bf616a>c</span><span>.</span><span style=color:#bf616a>codec</span><span>,
+</span><span>		</span><span style=color:#bf616a>cp</span><span>:           </span><span style=color:#bf616a>cp</span><span>,
+</span><span>		</span><span style=color:#bf616a>comp</span><span>:         </span><span style=color:#bf616a>comp</span><span>,
+</span><span>		</span><span style=color:#bf616a>cancel</span><span>:       </span><span style=color:#bf616a>cancel</span><span>,
+</span><span>		</span><span style=color:#bf616a>firstAttempt</span><span>: </span><span style=color:#d08770>true</span><span>,
+</span><span>		</span><span style=color:#bf616a>onCommit</span><span>:     </span><span style=color:#bf616a>onCommit</span><span>,
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>if </span><span>!</span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>disableRetry </span><span>{
+</span><span>		</span><span style=color:#bf616a>cs</span><span>.</span><span style=color:#bf616a>retryThrottler </span><span>= </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>retryThrottler</span><span>.</span><span style=color:#bf616a>Load</span><span>().(*</span><span style=color:#b48ead>retryThrottler</span><span>)
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ml </span><span>:= </span><span style=color:#bf616a>binarylog</span><span>.</span><span style=color:#bf616a>GetMethodLogger</span><span>(</span><span style=color:#bf616a>method</span><span>); </span><span style=color:#bf616a>ml </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#bf616a>cs</span><span>.</span><span style=color:#bf616a>binlogs </span><span>= </span><span style=color:#96b5b4>append</span><span>(</span><span style=color:#bf616a>cs</span><span>.</span><span style=color:#bf616a>binlogs</span><span>, </span><span style=color:#bf616a>ml</span><span>)
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>binaryLogger </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>ml </span><span>:= </span><span style=color:#bf616a>cc</span><span>.</span><span style=color:#bf616a>dopts</span><span>.</span><span style=color:#bf616a>binaryLogger</span><span>.</span><span style=color:#bf616a>GetMethodLogger</span><span>(</span><span style=color:#bf616a>method</span><span>); </span><span style=color:#bf616a>ml </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#bf616a>cs</span><span>.</span><span style=color:#bf616a>binlogs </span><span>= </span><span style=color:#96b5b4>append</span><span>(</span><span style=color:#bf616a>cs</span><span>.</span><span style=color:#bf616a>binlogs</span><span>, </span><span style=color:#bf616a>ml</span><span>)
+</span><span>		}
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// Pick the transport to use and create a new stream on the transport.
+</span><span>	</span><span style=color:#65737e>// Assign cs.attempt upon success.
+</span><span>	</span><span style=color:#bf616a>op </span><span>:= </span><span style=color:#b48ead>func</span><span>(</span><span style=color:#bf616a>a </span><span>*</span><span style=color:#b48ead>csAttempt</span><span>) </span><span style=color:#b48ead>error </span><span>{
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>a</span><span>.</span><span style=color:#bf616a>getTransport</span><span>(); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#bf616a>err
+</span><span>		}
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>a</span><span>.</span><span style=color:#bf616a>newStream</span><span>(); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#bf616a>err
+</span><span>		}
+</span><span>		</span><span style=color:#65737e>// Because this operation is always called either here (while creating
+</span><span>		</span><span style=color:#65737e>// the clientStream) or by the retry code while locked when replaying
+</span><span>		</span><span style=color:#65737e>// the operation, it is safe to access cs.attempt directly.
+</span><span>		</span><span style=color:#bf616a>cs</span><span>.</span><span style=color:#bf616a>attempt </span><span>= </span><span style=color:#bf616a>a
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>cs</span><span>.</span><span style=color:#bf616a>withRetry</span><span>(</span><span style=color:#bf616a>op</span><span>, </span><span style=color:#b48ead>func</span><span>() { </span><span style=color:#bf616a>cs</span><span>.</span><span style=color:#bf616a>bufferForRetryLocked</span><span>(</span><span style=color:#d08770>0</span><span>, </span><span style=color:#bf616a>op</span><span>, </span><span style=color:#d08770>nil</span><span>) }); </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>
+</span><span>    </span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>cs</span><span>, </span><span style=color:#d08770>nil
+</span><span>}
+</span></code></pre><p><code>newClientStreamWithParams</code> 函数主要有以下工作：<ol><li>设置 stream 配置参数以及 proto codec<li>初始化 <code>clientStream</code> 对象<li>调用 <code>csAttempt.getTransport</code> 方法调用 <code>ClientConn.pickerWrapper.pick</code> 方法选择一个连接<li>调用 <code>csAttempt.newStream</code> 在 pick 的底层连接上建立 stream</ol><h2 id=zong-jie><a aria-label="Anchor link for: zong-jie" class=zola-anchor href=#zong-jie>总结</a></h2><p>到这里，基本上都捋清楚了 grpc-go 库是通过抽象一个 <code>Resolver</code> 接口实现服务发现，并通过 <code>Balancer</code> 接口实现负载均衡，以及一个 <code>Picker</code> 接口通过 load balance 策略从连接池中获取一个连接进行发送。不管是 gRPC unary request 还是 gRPC steaming request 都会建立一个 HTTP2 stream，并在这个 stream 上发送 request 以及接收 response。</section></article></main></div></div><div class=right-content><div class=toc><div class=heading>Table of Contents</div><ul class=toc-list><li class=parent><a href=https://wiserfz.github.io/posts/grpc-go-balancer/#qian-yan>前言</a><li class=parent><a href=https://wiserfz.github.io/posts/grpc-go-balancer/#balancer>Balancer</a><li class=parent><a href=https://wiserfz.github.io/posts/grpc-go-balancer/#newclientstream>newClientStream</a><li class=parent><a href=https://wiserfz.github.io/posts/grpc-go-balancer/#newclientstreamwithparams>newClientStreamWithParams</a><li class=parent><a href=https://wiserfz.github.io/posts/grpc-go-balancer/#zong-jie>总结</a></ul></div></div>

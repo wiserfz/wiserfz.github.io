@@ -1,0 +1,220 @@
+<!doctype html><html class="dark light" lang=en><head><meta charset=UTF-8><meta content="IE=edge" http-equiv=X-UA-Compatible><meta content="width=device-width,initial-scale=1.0" name=viewport><meta content=https://wiserfz.github.io name=base><title>
+            
+                tower balance
+            
+        </title><meta content="tower balance" property=og:title><meta content="Balance policy in tower crate." property=og:description><meta content="Balance policy in tower crate." name=description><link href=https://wiserfz.github.io/img/favicons/favicon.ico rel=icon type=image/png><link href=https://wiserfz.github.io/fonts.css rel=stylesheet><script defer src=https://wiserfz.github.io/js/codeblock.js></script><script defer src=https://wiserfz.github.io/js/toc.js></script><script>MathJax = {
+                    tex: {
+                        inlineMath: [
+                            ['$', '$'],
+                            ['\\(', '\\)']
+                        ]
+                    }
+                };</script><script async id=MathJax-script src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/atom.xml rel=alternate type=application/atom+xml><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/rss.xml rel=alternate type=application/rss+xml><link href=https://wiserfz.github.io/theme/light.css rel=stylesheet><link href=https://wiserfz.github.io/theme/dark.css id=darkModeStyle rel=stylesheet><script src=https://wiserfz.github.io/js/themetoggle.js></script><script>setTheme(getSavedTheme());</script><link href=https://wiserfz.github.io/main.css media=screen rel=stylesheet><script src="https://wiserfz.github.io/search_index.en.js?h=83f808dfc552363cb1ef" defer></script><script src="https://wiserfz.github.io/js/searchElasticlunr.min.js?h=3626c0ef99daa745b31e" defer></script><body><div class=left-content></div><div class=content><nav><div class=left-nav><a href=https://wiserfz.github.io>wiser's blog</a><div class=socials><a rel="'me" target="'_blank'" class=social href=https://wiserfz.github.io/rss.xml noopener&#x27;> <img alt=rss src=https://wiserfz.github.io/icons/social/rss.svg> </a><a rel="'me" target="'_blank'" class=social href=mailto:wiserfz810@gmail.com noopener&#x27;> <img alt=email src=https://wiserfz.github.io/icons/social/email.svg> </a><a rel="'me" target="'_blank'" class=social href=https://github.com/wiserfz/ noopener&#x27;> <img alt=github src=https://wiserfz.github.io/icons/social/github.svg> </a></div></div><div class=right-nav><a href=https://wiserfz.github.io style=margin-right:.5em>/home</a><a href=https://wiserfz.github.io/posts style=margin-right:.5em>/posts</a><a href=https://wiserfz.github.io/tags style=margin-right:.5em>/tags</a><a href=https://wiserfz.github.io/about style=margin-right:.5em>/about</a><button title="$SHORTCUT to open search" class=search-button id=search-button><img alt=Search class=search-icon src=https://wiserfz.github.io/icons/search.svg></button><div class="search-modal js" aria-labelledby=modalTitle id=searchModal role=dialog><div id=modal-content><h1 class=page-header id=modalTitle>Search</h1><div id=searchBar><input aria-controls=results-container aria-expanded=false autocomplete=off id=searchInput placeholder=Search... role=combobox spellcheck=false><button title="Clear search" class=clear-button id=clear-search><svg viewbox="0 -960 960 960" xmlns=http://www.w3.org/2000/svg><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg></button></div><div id=results-container><div id=results-info><span id=zero_results style=display:none>No results</span><span id=one_result style=display:none>1 result</span><span id=many_results style=display:none>$NUMBER results</span></div><div id=results role=listbox></div></div></div></div><a onclick="toggleTheme(); event.preventDefault();" href=# id=dark-mode-toggle> <img alt=Light id=sun-icon src=https://wiserfz.github.io/icons/sun.svg style=filter:invert()> <img alt=Dark id=moon-icon src=https://wiserfz.github.io/icons/moon.svg> </a><script>updateItemToggleTheme()</script></div></nav><div data-selector="main article p" class=visible-element-observer-root><main><article><div class=title><div class=page-header>tower balance</div><div class=meta>Posted on <time>2024-12-14</time><span class=tags-label>::</span><span class=tags> <a class=post-tag href=https://wiserfz.github.io/tags/tower/>tower</a> <a class=post-tag href=https://wiserfz.github.io/tags/code/>code</a> </span></div></div><section class=body><h2 id=qian-yan><a aria-label="Anchor link for: qian-yan" class=zola-anchor href=#qian-yan>前言</a></h2><p>在之前分析 tonic 的<a href=/posts/client-of-grpc-in-rust/>文章</a>中，由于 <code>tonic</code> 中大量使用的 <code>tower</code> 库中的组件，并且没有分析 <code>tonic</code> 中的 balance 策略，相当于还有一部分的东西是缺失的，因此；在这篇文章中补全。<h2 id=Overview><a aria-label="Anchor link for: Overview" class=zola-anchor href=#Overview>概述</a></h2><p>从 <a href=https://docs.rs/tower/latest/tower/ rel=noopener target=_blank><code>tower</code></a> 文档的概述中，就可以得知 <code>tower</code> 为网络请求的客户端和服务端提供了模块化并且可重用的可靠组件；而这些组件的核心就是 <code>Service</code> trait。<p><code>tower</code> 库包含四个 crates<ul><li>tower：负责组件的实现逻辑<li>tower-service：<code>Service</code> trait 的定义<li>tower-layer：<code>Layer</code> trait 的定义<li>tower-test：集成测试模块</ul><p>从文档，可以知道要想了解 tower 中组件的实现，必须先了解 <code>Service</code> trait 的定义以及如何使用，因此；这篇文章着重于 <code>Service</code> trait 以及 <code>balance</code> module。<h2 id=service><a aria-label="Anchor link for: service" class=zola-anchor href=#service>Service</a></h2><p>从 <code>tower</code> 的文档，最醒目的一行就是对 <code>Service</code> trait 的描述：<p><strong><code>async fn(request) -> Result&lt;Response, Error></code></strong><p>这即是描述 <code>Service</code> trait 也描述一个网络请求的模型，<code>Service</code> trait 为实现这个请求模型做了以下定义：<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>pub trait </span><span>Service&lt;Request> {
+</span><span>    </span><span style=color:#b48ead>type </span><span>Response;
+</span><span>    </span><span style=color:#b48ead>type </span><span>Error;
+</span><span>    </span><span style=color:#b48ead>type </span><span>Future: Future&lt;Output = Result&lt;</span><span style=color:#b48ead>Self::</span><span>Response, </span><span style=color:#b48ead>Self::</span><span>Error>>;
+</span><span>
+</span><span>    </span><span style=color:#65737e>// Required methods
+</span><span>    </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>poll_ready</span><span>(&</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>, </span><span style=color:#bf616a>cx</span><span>: &</span><span style=color:#b48ead>mut </span><span>Context&lt;'_>) -> Poll&lt;Result&lt;(), </span><span style=color:#b48ead>Self::</span><span>Error>>;
+</span><span>    </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>call</span><span>(&</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>, </span><span style=color:#bf616a>req</span><span>: Request) -> </span><span style=color:#b48ead>Self::</span><span>Future;
+</span><span>}
+</span></code></pre><p><code>Service</code> trait 定义了三个关联类型（associated type）分别是 <code>Response</code>，<code>Error</code> 以及 <code>Future</code>：<ul><li>Response: 请求返回的响应<li>Error：请求发生错误返回的 Error<li>Future：发起请求的 Future trait</ul><p>以及定义了两个 required methods。<h3 id=poll-ready><a aria-label="Anchor link for: poll-ready" class=zola-anchor href=#poll-ready>poll_ready</a></h3><p>一个请求是否能否发送，需要有很多条件，比如操作系统的 buffer 是否有空闲，在比如底层连接状态是否正常等，这些都是需要在执行发送请求前提前进行判断的，<code>poll_ready</code> 就是进行判断请求能否发送，它会返回以下三种情况：<ul><li><code>Poll::Ready(Ok(()))</code>：表示请求可以被发送<li><code>Poll::Pending</code>：表示请求暂时不能被处理，因为底层的 Service 还因为各种各样的原因还没有准备好，这个请求需要被阻塞以等待 service 准备好<li><code>Poll::Ready(Err(_))</code>：表示底层 service 错误，并且不可以在被使用</ul><p><strong>⚠️ 注意：</strong><ol><li>在发送请求之前，<code>poll_ready</code> 方法可以被重复调用，但是必须返回 <code>Poll::Ready(Ok(()))</code> 或者 <code>Poll::Ready(Err(_))</code><li><code>poll_ready</code> 方法调用必须在 <code>call</code> 方法调用之前；因为底层的 Service 对象可能会被多个资源使用者共享，因此不能假设，底层服务一直都是 Ready 状态，如果底层服务被释放掉，则调用的对象也要及时释放这个 <code>Service</code> 对象，举个🌰：如果底层连接的 socket 因为某种错误被操作系统回收，但是因为没有调用 <code>poll_ready</code> 方法，而直接调用 <code>call</code> 方法这种情况。</ol><h3 id=call><a aria-label="Anchor link for: call" class=zola-anchor href=#call>call</a></h3><p>异步的处理请求，如果没有调用 <code>poll_ready</code> 就调用 <code>call</code> 则有可能造成程序 panic<h2 id=balance><a aria-label="Anchor link for: balance" class=zola-anchor href=#balance>Balance</a></h2><p>目前，tower 中实现的 load balance 只有 <code>p2c(power of two random choices)</code>，在该 module 下面有四个 struct 的实现：<ul><li>Balance：p2c load balance<li>MakeBalance：构建 p2c balance 的对象<li>MakeBalanceLayer：通过 Layer trait 构建 p2c balance 对象<li>MakeFuture：构建 p2c balance 的 Future</ul><p>因此，着重了解 <code>Balance</code> 对象中有哪些字段声明。<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>pub struct </span><span>Balance&lt;D, Req>
+</span><span>where
+</span><span>    D: Discover,
+</span><span>    D::Key: Hash,
+</span><span>{
+</span><span>    </span><span style=color:#bf616a>discover</span><span>: D,
+</span><span>
+</span><span>    </span><span style=color:#bf616a>services</span><span>: ReadyCache&lt;</span><span style=color:#b48ead>D::</span><span>Key, </span><span style=color:#b48ead>D::</span><span>Service, Req>,
+</span><span>    </span><span style=color:#bf616a>ready_index</span><span>: Option&lt;</span><span style=color:#b48ead>usize</span><span>>,
+</span><span>
+</span><span>    </span><span style=color:#bf616a>rng</span><span>: Box&lt;dyn Rng + Send + Sync>,
+</span><span>
+</span><span>    </span><span style=color:#bf616a>_req</span><span>: PhantomData&lt;Req>,
+</span><span>}
+</span></code></pre><ul><li>discover：要求是要有实现 <code>tower::discover::Discover</code> trait 的对象，动态管理底层 Service 对象<li>services：底层 Services 集合<li>ready_index：p2c 策略 pick 好的 Service index<li>rng：随机因子<li>_req：关联的泛型 Req 的声明字段</ul><p>在<a href=https://wiserfz.github.io/posts/tower-balance/#Overview>概述</a>中有说明，tower 中实现的组件都以 <code>Service</code> trait 为核心，因此；<code>Balance</code> 对象实现的 <code>Service</code> trait 就是实际 p2c 策略实现的逻辑。<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>impl</span><span>&lt;D, Req> Service&lt;Req> </span><span style=color:#b48ead>for </span><span>Balance&lt;D, Req>
+</span><span style=color:#b48ead>where
+</span><span>    D: Discover + Unpin,
+</span><span>    </span><span style=color:#b48ead>D::</span><span>Key: Hash + Clone,
+</span><span>    </span><span style=color:#b48ead>D::</span><span>Error: Into&lt;crate::BoxError>,
+</span><span>    </span><span style=color:#b48ead>D::</span><span>Service: Service&lt;Req> + Load,
+</span><span>    &lt;</span><span style=color:#b48ead>D::</span><span>Service as Load>::Metric: std::fmt::Debug,
+</span><span>    &lt;</span><span style=color:#b48ead>D::</span><span>Service as Service&lt;Req>>::Error: Into&lt;crate::BoxError>,
+</span><span>{
+</span><span>    </span><span style=color:#b48ead>type </span><span>Response = &lt;</span><span style=color:#b48ead>D::</span><span>Service as Service&lt;Req>>::Response;
+</span><span>    </span><span style=color:#b48ead>type </span><span>Error = </span><span style=color:#b48ead>crate</span><span>::BoxError;
+</span><span>    </span><span style=color:#b48ead>type </span><span>Future = future::MapErr&lt;
+</span><span>        &lt;</span><span style=color:#b48ead>D::</span><span>Service as Service&lt;Req>>::Future,
+</span><span>        </span><span style=color:#b48ead>fn</span><span>(&lt;</span><span style=color:#b48ead>D::</span><span>Service as Service&lt;Req>>::Error) -> crate::BoxError,
+</span><span>    >;
+</span><span>
+</span><span>    </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>poll_ready</span><span>(&</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>, </span><span style=color:#bf616a>cx</span><span>: &</span><span style=color:#b48ead>mut </span><span>Context&lt;'_>) -> Poll&lt;Result&lt;(), </span><span style=color:#b48ead>Self::</span><span>Error>> {
+</span><span>        </span><span style=color:#65737e>// 接收从 Discover 中收到的 Change 对象，动态管理底层 Service
+</span><span>        </span><span style=color:#b48ead>let </span><span>_ = </span><span style=color:#bf616a>self</span><span>.</span><span style=color:#96b5b4>update_pending_from_discover</span><span>(cx)?;
+</span><span>        </span><span style=color:#65737e>// 不断的 poll 底层 Service，并把它们变为 ready 状态
+</span><span>        </span><span style=color:#bf616a>self</span><span>.</span><span style=color:#96b5b4>promote_pending_to_ready</span><span>(cx);
+</span><span>
+</span><span>        </span><span style=color:#b48ead>loop </span><span>{
+</span><span>            </span><span style=color:#65737e>// p2c load balance 实现逻辑
+</span><span>            </span><span style=color:#b48ead>if let </span><span>Some(index) = </span><span style=color:#bf616a>self</span><span>.ready_index.</span><span style=color:#96b5b4>take</span><span>() {
+</span><span>                </span><span style=color:#b48ead>match </span><span style=color:#bf616a>self</span><span>.services.</span><span style=color:#96b5b4>check_ready_index</span><span>(cx, index) {
+</span><span>                    Ok(</span><span style=color:#d08770>true</span><span>) => {
+</span><span>                        </span><span style=color:#65737e>// The service remains ready.
+</span><span>                        </span><span style=color:#bf616a>self</span><span>.ready_index = Some(index);
+</span><span>                        </span><span style=color:#b48ead>return </span><span>Poll::Ready(Ok(()));
+</span><span>                    }
+</span><span>                    Ok(</span><span style=color:#d08770>false</span><span>) => {
+</span><span>                        </span><span style=color:#65737e>// The service is no longer ready. Try to find a new one.
+</span><span>                        trace!("</span><span style=color:#a3be8c>ready service became unavailable</span><span>");
+</span><span>                    }
+</span><span>                    Err(Failed(_, error)) => {
+</span><span>                        </span><span style=color:#65737e>// The ready endpoint failed, so log the error and try
+</span><span>                        </span><span style=color:#65737e>// to find a new one.
+</span><span>                        debug!(%error, "</span><span style=color:#a3be8c>endpoint failed</span><span>");
+</span><span>                    }
+</span><span>                }
+</span><span>            }
+</span><span>
+</span><span>            </span><span style=color:#65737e>// Select a new service by comparing two at random and using the
+</span><span>            </span><span style=color:#65737e>// lesser-loaded service.
+</span><span>            </span><span style=color:#bf616a>self</span><span>.ready_index = </span><span style=color:#bf616a>self</span><span>.</span><span style=color:#96b5b4>p2c_ready_index</span><span>();
+</span><span>            </span><span style=color:#b48ead>if </span><span style=color:#bf616a>self</span><span>.ready_index.</span><span style=color:#96b5b4>is_none</span><span>() {
+</span><span>                debug_assert_eq!(</span><span style=color:#bf616a>self</span><span>.services.</span><span style=color:#96b5b4>ready_len</span><span>(), </span><span style=color:#d08770>0</span><span>);
+</span><span>                </span><span style=color:#65737e>// We have previously registered interest in updates from
+</span><span>                </span><span style=color:#65737e>// discover and pending services.
+</span><span>                </span><span style=color:#b48ead>return </span><span>Poll::Pending;
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>call</span><span>(&</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>, </span><span style=color:#bf616a>request</span><span>: Req) -> </span><span style=color:#b48ead>Self::</span><span>Future {
+</span><span>        </span><span style=color:#b48ead>let</span><span> index = </span><span style=color:#bf616a>self</span><span>.ready_index.</span><span style=color:#96b5b4>take</span><span>().</span><span style=color:#96b5b4>expect</span><span>("</span><span style=color:#a3be8c>called before ready</span><span>");
+</span><span>        </span><span style=color:#bf616a>self</span><span>.services
+</span><span>            .</span><span style=color:#96b5b4>call_ready_index</span><span>(index, request)
+</span><span>            .</span><span style=color:#96b5b4>map_err</span><span>(Into::into)
+</span><span>    }
+</span><span>}
+</span></code></pre><p>上述代码就是，整个 <code>Balance</code> 的核心逻辑了，可以看到，对比 <code>grpc-go</code> 中 balancer 的实现要简洁很多，而且从我个人角度来看也实现的更加优雅，<code>grpc-go</code> 中的实现调用，在我阅读期间简直让我头昏脑胀，不得不用时序图来表明调用逻辑，具体可以看这篇<a href=/posts/client-of-grpc-in-go-balancer/>文章</a>。<h3 id=poll-ready-1><a aria-label="Anchor link for: poll-ready-1" class=zola-anchor href=#poll-ready-1>poll_ready</a></h3><pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#65737e>/// Polls `discover` for updates, adding new items to `not_ready`.
+</span><span style=color:#65737e>///
+</span><span style=color:#65737e>/// Removals may alter the order of either `ready` or `not_ready`.
+</span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>update_pending_from_discover</span><span>(
+</span><span>    &</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>,
+</span><span>    </span><span style=color:#bf616a>cx</span><span>: &</span><span style=color:#b48ead>mut </span><span>Context&lt;'_>,
+</span><span>) -> Poll&lt;Option&lt;Result&lt;(), error::Discover>>> {
+</span><span>    debug!("</span><span style=color:#a3be8c>updating from discover</span><span>");
+</span><span>    </span><span style=color:#b48ead>loop </span><span>{
+</span><span>        </span><span style=color:#b48ead>match </span><span>ready!(Pin::new(&</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>.discover).</span><span style=color:#96b5b4>poll_discover</span><span>(cx))
+</span><span>            .</span><span style=color:#96b5b4>transpose</span><span>()
+</span><span>            .</span><span style=color:#96b5b4>map_err</span><span>(|</span><span style=color:#bf616a>e</span><span>| error::Discover(e.</span><span style=color:#96b5b4>into</span><span>()))?
+</span><span>        {
+</span><span>            None => </span><span style=color:#b48ead>return </span><span>Poll::Ready(None),
+</span><span>            Some(Change::Remove(key)) => {
+</span><span>                trace!("</span><span style=color:#a3be8c>remove</span><span>");
+</span><span>                </span><span style=color:#bf616a>self</span><span>.services.</span><span style=color:#96b5b4>evict</span><span>(&key);
+</span><span>            }
+</span><span>            Some(Change::Insert(key, svc)) => {
+</span><span>                trace!("</span><span style=color:#a3be8c>insert</span><span>");
+</span><span>                </span><span style=color:#65737e>// If this service already existed in the set, it will be
+</span><span>                </span><span style=color:#65737e>// replaced as the new one becomes ready.
+</span><span>                </span><span style=color:#bf616a>self</span><span>.services.</span><span style=color:#96b5b4>push</span><span>(key, svc);
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre><p>不断的 poll <code>Discover</code> 对象并从中接收 <code>tower::discover::Change</code> 对象，如果是 <code>Change::Remove</code> 则从 services 集合中删除底层 service，如果是 <code>Change::Insert</code> 则把 service 加入 services 集合中。<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>promote_pending_to_ready</span><span>(&</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>, </span><span style=color:#bf616a>cx</span><span>: &</span><span style=color:#b48ead>mut </span><span>Context&lt;'_>) {
+</span><span>    </span><span style=color:#b48ead>loop </span><span>{
+</span><span>        </span><span style=color:#b48ead>match </span><span style=color:#bf616a>self</span><span>.services.</span><span style=color:#96b5b4>poll_pending</span><span>(cx) {
+</span><span>            Poll::Ready(Ok(())) => {
+</span><span>                </span><span style=color:#65737e>// There are no remaining pending services.
+</span><span>                debug_assert_eq!(</span><span style=color:#bf616a>self</span><span>.services.</span><span style=color:#96b5b4>pending_len</span><span>(), </span><span style=color:#d08770>0</span><span>);
+</span><span>                </span><span style=color:#b48ead>break</span><span>;
+</span><span>            }
+</span><span>            Poll::Pending => {
+</span><span>                </span><span style=color:#65737e>// None of the pending services are ready.
+</span><span>                debug_assert!(</span><span style=color:#bf616a>self</span><span>.services.</span><span style=color:#96b5b4>pending_len</span><span>() > </span><span style=color:#d08770>0</span><span>);
+</span><span>                </span><span style=color:#b48ead>break</span><span>;
+</span><span>            }
+</span><span>            Poll::Ready(Err(error)) => {
+</span><span>                </span><span style=color:#65737e>// An individual service was lost; continue processing
+</span><span>                </span><span style=color:#65737e>// pending services.
+</span><span>                debug!(%error, "</span><span style=color:#a3be8c>dropping failed endpoint</span><span>");
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>    trace!(
+</span><span>        ready = %</span><span style=color:#bf616a>self</span><span>.services.</span><span style=color:#96b5b4>ready_len</span><span>(),
+</span><span>        pending = %</span><span style=color:#bf616a>self</span><span>.services.</span><span style=color:#96b5b4>pending_len</span><span>(),
+</span><span>        "</span><span style=color:#a3be8c>poll_unready</span><span>"
+</span><span>    );
+</span><span>}
+</span></code></pre><p><code>promote_pending_to_ready</code> 方法不断的 poll services 集合；<ul><li>返回 <code>Poll::Ready(Ok(()))</code>：表示底层有可用的 service 并返回<li>返回 <code>Poll::Pending</code>：表示底层的所有 service 都不可用，阻塞调用，等待 Event 事件唤醒，并继续 poll services 集合，知道有可用 service 返回<li>返回 <code>Poll::Ready(Err(_))</code>：表示该 service 内部出错，不可用；继续 poll 下一个 service</ul><p>然后，通过 p2c 策略从 services 集合中的 ready 对象集合中获取一个 service 并把这个 service 的 index 存入 <code>ready_index</code> 字段中，为 <code>call</code> 调用做准备<h3 id=call-1><a aria-label="Anchor link for: call-1" class=zola-anchor href=#call-1>call</a></h3><p>通过 <code>poll_ready</code> 方法调用，可用的 service 的 index 已经存在 <code>ready_index</code> 字段中，从中取出 index 并通过 <code>self.services.call_ready_index</code> 发送请求，等待响应。<h2 id=readycache><a aria-label="Anchor link for: readycache" class=zola-anchor href=#readycache>ReadyCache</a></h2><p>上述中 services 集合是利用的 <code>tower::ready_cache::ReadyCache</code> 对象。<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>pub struct </span><span>ReadyCache&lt;K, S, Req>
+</span><span>where
+</span><span>    K: Eq + Hash,
+</span><span>{
+</span><span>    </span><span style=color:#bf616a>pending</span><span>: FuturesUnordered&lt;Pending&lt;K, S, Req>>,
+</span><span>
+</span><span>    </span><span style=color:#bf616a>pending_cancel_txs</span><span>: IndexMap&lt;K, CancelTx>,
+</span><span>
+</span><span>    </span><span style=color:#bf616a>ready</span><span>: IndexMap&lt;K, (S, CancelPair)>,
+</span><span>}
+</span></code></pre><ul><li><code>pending</code>：<code>FuturesUnordered</code> 是一个实现 <code>Stream</code> trait 的对象，暂时不可用的 service 集合<li><code>pending_cancel_txs</code>：当 service 不可用或者被删除时，通过 <code>CancelTx</code> 删除 service<li><code>ready</code>：可用的 service 集合</ul><p>当一个新的 service 通过 <code>update_pending_from_discover</code> 方法中的 <code>self.services.push(key, svc)</code> 方法调用，会被统一加入到 <code>pending</code> 对象中，因此；调用 <code>self.services.poll_pending</code> 方法，会 poll <code>pending</code> 中的每一个对象。<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>pub fn </span><span style=color:#8fa1b3>poll_pending</span><span>(&</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>, </span><span style=color:#bf616a>cx</span><span>: &</span><span style=color:#b48ead>mut </span><span>Context&lt;'_>) -> Poll&lt;Result&lt;(), error::Failed&lt;K>>> {
+</span><span>    </span><span style=color:#b48ead>loop </span><span>{
+</span><span>        </span><span style=color:#b48ead>match </span><span>Pin::new(&</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>.pending).</span><span style=color:#96b5b4>poll_next</span><span>(cx) {
+</span><span>            Poll::Pending => </span><span style=color:#b48ead>return </span><span>Poll::Pending,
+</span><span>            Poll::Ready(None) => </span><span style=color:#b48ead>return </span><span>Poll::Ready(Ok(())),
+</span><span>            Poll::Ready(Some(Ok((key, svc, cancel_rx)))) => {
+</span><span>                trace!("</span><span style=color:#a3be8c>endpoint ready</span><span>");
+</span><span>                </span><span style=color:#b48ead>let</span><span> cancel_tx = </span><span style=color:#bf616a>self</span><span>.pending_cancel_txs.</span><span style=color:#96b5b4>swap_remove</span><span>(&key);
+</span><span>                </span><span style=color:#b48ead>if let </span><span>Some(cancel_tx) = cancel_tx {
+</span><span>                    </span><span style=color:#65737e>// Keep track of the cancelation so that it need not be
+</span><span>                    </span><span style=color:#65737e>// recreated after the service is used.
+</span><span>                    </span><span style=color:#bf616a>self</span><span>.ready.</span><span style=color:#96b5b4>insert</span><span>(key, (svc, (cancel_tx, cancel_rx)));
+</span><span>                } </span><span style=color:#b48ead>else </span><span>{
+</span><span>                    assert!(
+</span><span>                        cancel_tx.</span><span style=color:#96b5b4>is_some</span><span>(),
+</span><span>                        "</span><span style=color:#a3be8c>services that become ready must have a pending cancelation</span><span>"
+</span><span>                    );
+</span><span>                }
+</span><span>            }
+</span><span>            Poll::Ready(Some(Err(PendingError::Canceled(_)))) => {
+</span><span>                debug!("</span><span style=color:#a3be8c>endpoint canceled</span><span>");
+</span><span>                </span><span style=color:#65737e>// The cancellation for this service was removed in order to
+</span><span>                </span><span style=color:#65737e>// cause this cancellation.
+</span><span>            }
+</span><span>            Poll::Ready(Some(Err(PendingError::Inner(key, e)))) => {
+</span><span>                </span><span style=color:#b48ead>let</span><span> cancel_tx = </span><span style=color:#bf616a>self</span><span>.pending_cancel_txs.</span><span style=color:#96b5b4>swap_remove</span><span>(&key);
+</span><span>                assert!(
+</span><span>                    cancel_tx.</span><span style=color:#96b5b4>is_some</span><span>(),
+</span><span>                    "</span><span style=color:#a3be8c>services that return an error must have a pending cancelation</span><span>"
+</span><span>                );
+</span><span>                </span><span style=color:#b48ead>return </span><span>Err(error::Failed(key, e.</span><span style=color:#96b5b4>into</span><span>())).</span><span style=color:#96b5b4>into</span><span>();
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre><p>poll 每个其中的 servicer 对象只会返回以下结果：<ul><li><code>Poll::Pending</code>：该服务暂时不可用，因此继续留在 <code>pending</code> 中<li><code>Poll::Ready(None)</code>：表示 <code>pending</code> 集合中没有 service 对象了<li><code>Poll::Ready(Ok(_))</code>：表示该 service 已经处于 ready 状态，可以发送请求了，并把它加入到 <code>ready</code> 集合中<li><code>Poll::Ready(Err(_))</code>: 这里把 Error 分成两种类型，一种是 <code>PendingError::Canceled</code> 表示已经被 cancel 掉的 service，service 已经被删除掉了，因此这里忽略；另一种错误是 <code>PendingError::Inner</code>，这里表示 service 内部错误，不能被忽略处理，需要调用 CancelTx，并把 service cancel 掉</ul><p>这样，就把所有处于 <code>pending</code> 集合中的 service 都处理了一边，并把可用的 service 加入到 <code>ready</code> 集合中，暂时不可用的 service 继续留在 <code>pending</code> 中，发生错误的 service 进行 cancel 处理。<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#65737e>/// Calls a ready service by index.
+</span><span style=color:#65737e>///
+</span><span style=color:#65737e>/// # Panics
+</span><span style=color:#65737e>///
+</span><span style=color:#65737e>/// If the specified index is out of range.
+</span><span style=color:#b48ead>pub fn </span><span style=color:#8fa1b3>call_ready_index</span><span>(&</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>, </span><span style=color:#bf616a>index</span><span>: </span><span style=color:#b48ead>usize</span><span>, </span><span style=color:#bf616a>req</span><span>: Req) -> </span><span style=color:#b48ead>S::</span><span>Future {
+</span><span>    </span><span style=color:#b48ead>let </span><span>(key, (</span><span style=color:#b48ead>mut</span><span> svc, cancel)) = </span><span style=color:#bf616a>self
+</span><span>        .ready
+</span><span>        .</span><span style=color:#96b5b4>swap_remove_index</span><span>(index)
+</span><span>        .</span><span style=color:#96b5b4>expect</span><span>("</span><span style=color:#a3be8c>check_ready_index was not called</span><span>");
+</span><span>
+</span><span>    </span><span style=color:#b48ead>let</span><span> fut = svc.</span><span style=color:#96b5b4>call</span><span>(req);
+</span><span>
+</span><span>    </span><span style=color:#65737e>// If a new version of this service has been added to the
+</span><span>    </span><span style=color:#65737e>// unready set, don't overwrite it.
+</span><span>    </span><span style=color:#b48ead>if </span><span>!</span><span style=color:#bf616a>self</span><span>.</span><span style=color:#96b5b4>pending_contains</span><span>(&key) {
+</span><span>        </span><span style=color:#bf616a>self</span><span>.</span><span style=color:#96b5b4>push_pending</span><span>(key, svc, cancel);
+</span><span>    }
+</span><span>
+</span><span>    fut
+</span><span>}
+</span></code></pre><p><code>call_ready_index</code> 方法会通过 index 从 <code>ready</code> 集合中获取 service 并调用该 service 的 <code>Service.Call</code> 方法，并返回 <code>Service</code> trait 中定义的关联类型 Future，让调用者通过 <code>await</code> 获取 Response。<p>同时，会把从 ready 集合中取出的 service 对象，加入到 <code>pending</code> 集合中，这样等待，下一次的调用；如果该 service 继续可以使用，那么就在把它从 <code>pending</code> 集合在加入到 <code>ready</code> 集合中，通过从 <code>pending</code> -> <code>ready</code>，以及 <code>ready</code> -> <code>pending</code> 这样的循环调用，实现服务请求的可靠使用。</section></article></main></div></div><div class=right-content><div class=toc><div class=heading>Table of Contents</div><ul class=toc-list><li class=parent><a href=https://wiserfz.github.io/posts/tower-balance/#qian-yan>前言</a><li class=parent><a href=https://wiserfz.github.io/posts/tower-balance/#Overview>概述</a><li class=parent><a href=https://wiserfz.github.io/posts/tower-balance/#service>Service</a> <ul><li><a href=https://wiserfz.github.io/posts/tower-balance/#poll-ready>poll_ready</a><li><a href=https://wiserfz.github.io/posts/tower-balance/#call>call</a></ul><li class=parent><a href=https://wiserfz.github.io/posts/tower-balance/#balance>Balance</a> <ul><li><a href=https://wiserfz.github.io/posts/tower-balance/#poll-ready-1>poll_ready</a><li><a href=https://wiserfz.github.io/posts/tower-balance/#call-1>call</a></ul><li class=parent><a href=https://wiserfz.github.io/posts/tower-balance/#readycache>ReadyCache</a></ul></div></div>

@@ -1,0 +1,552 @@
+<!doctype html><html class="dark light" lang=en><head><meta charset=UTF-8><meta content="IE=edge" http-equiv=X-UA-Compatible><meta content="width=device-width,initial-scale=1.0" name=viewport><meta content=https://wiserfz.github.io name=base><title>
+            
+                etcd raft
+            
+        </title><meta content="etcd raft" property=og:title><meta content="Source code of etcd and raft" property=og:description><meta content="Source code of etcd and raft" name=description><link href=https://wiserfz.github.io/img/favicons/favicon.ico rel=icon type=image/png><link href=https://wiserfz.github.io/fonts.css rel=stylesheet><script defer src=https://wiserfz.github.io/js/codeblock.js></script><script defer src=https://wiserfz.github.io/js/toc.js></script><script>MathJax = {
+                    tex: {
+                        inlineMath: [
+                            ['$', '$'],
+                            ['\\(', '\\)']
+                        ]
+                    }
+                };</script><script async id=MathJax-script src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/atom.xml rel=alternate type=application/atom+xml><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/rss.xml rel=alternate type=application/rss+xml><link href=https://wiserfz.github.io/theme/light.css rel=stylesheet><link href=https://wiserfz.github.io/theme/dark.css id=darkModeStyle rel=stylesheet><script src=https://wiserfz.github.io/js/themetoggle.js></script><script>setTheme(getSavedTheme());</script><link href=https://wiserfz.github.io/main.css media=screen rel=stylesheet><script src="https://wiserfz.github.io/search_index.en.js?h=83f808dfc552363cb1ef" defer></script><script src="https://wiserfz.github.io/js/searchElasticlunr.min.js?h=3626c0ef99daa745b31e" defer></script><body><div class=left-content></div><div class=content><nav><div class=left-nav><a href=https://wiserfz.github.io>wiser's blog</a><div class=socials><a rel="'me" target="'_blank'" class=social href=https://wiserfz.github.io/rss.xml noopener&#x27;> <img alt=rss src=https://wiserfz.github.io/icons/social/rss.svg> </a><a rel="'me" target="'_blank'" class=social href=mailto:wiserfz810@gmail.com noopener&#x27;> <img alt=email src=https://wiserfz.github.io/icons/social/email.svg> </a><a rel="'me" target="'_blank'" class=social href=https://github.com/wiserfz/ noopener&#x27;> <img alt=github src=https://wiserfz.github.io/icons/social/github.svg> </a></div></div><div class=right-nav><a href=https://wiserfz.github.io style=margin-right:.5em>/home</a><a href=https://wiserfz.github.io/posts style=margin-right:.5em>/posts</a><a href=https://wiserfz.github.io/tags style=margin-right:.5em>/tags</a><a href=https://wiserfz.github.io/about style=margin-right:.5em>/about</a><button title="$SHORTCUT to open search" class=search-button id=search-button><img alt=Search class=search-icon src=https://wiserfz.github.io/icons/search.svg></button><div class="search-modal js" aria-labelledby=modalTitle id=searchModal role=dialog><div id=modal-content><h1 class=page-header id=modalTitle>Search</h1><div id=searchBar><input aria-controls=results-container aria-expanded=false autocomplete=off id=searchInput placeholder=Search... role=combobox spellcheck=false><button title="Clear search" class=clear-button id=clear-search><svg viewbox="0 -960 960 960" xmlns=http://www.w3.org/2000/svg><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg></button></div><div id=results-container><div id=results-info><span id=zero_results style=display:none>No results</span><span id=one_result style=display:none>1 result</span><span id=many_results style=display:none>$NUMBER results</span></div><div id=results role=listbox></div></div></div></div><a onclick="toggleTheme(); event.preventDefault();" href=# id=dark-mode-toggle> <img alt=Light id=sun-icon src=https://wiserfz.github.io/icons/sun.svg style=filter:invert()> <img alt=Dark id=moon-icon src=https://wiserfz.github.io/icons/moon.svg> </a><script>updateItemToggleTheme()</script></div></nav><div data-selector="main article p" class=visible-element-observer-root><main><article><div class=title><div class=page-header>etcd raft</div><div class=meta>Posted on <time>2025-04-05</time><span class=tags-label>::</span><span class=tags> <a class=post-tag href=https://wiserfz.github.io/tags/etcd/>etcd</a> <a class=post-tag href=https://wiserfz.github.io/tags/code/>code</a> </span></div></div><section class=body><h1 id=qian-yan><a aria-label="Anchor link for: qian-yan" class=zola-anchor href=#qian-yan>前言</a></h1><p>在现如今微服务架构横行的今天，服务间的注册与发现是保证微服务架构稳定运行的关键。而 etcd 组件又常被用作服务注册与发现的基础组件，因此了解并熟悉它是每一个开发人员所必须的技能。在此记录笔者阅读源代码的过程以及一些分享。<p>这篇博客是基于 etcd v3.5.21 版本，打算从以下三个方面全面了解 etcd：<ol><li>etcd 的核心 raft 共识算法的实现<li>etcd 的存储以及 MVCC 的实现<li>etcd 的 API</ol><h1 id=etcd-server><a aria-label="Anchor link for: etcd-server" class=zola-anchor href=#etcd-server>etcd server</a></h1><p>首先需要了解清楚 etcd server 的启动流程，etcd server 的 main 文件在 <code>server/main.go</code>，从这里一直追踪下去会发现每个 etcd server 都会启动一个 raft node，在 <code>etcdserver.NewServer</code> 函数中可以找到不同情况下 raft node 的启动。由于函数比较长，这里保留我认为比较重要的部分。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span style=color:#8fa1b3>NewServer</span><span>(</span><span style=color:#bf616a>cfg config</span><span>.</span><span style=color:#b48ead>ServerConfig</span><span>) (</span><span style=color:#bf616a>srv </span><span>*</span><span style=color:#b48ead>EtcdServer</span><span>, </span><span style=color:#bf616a>err </span><span style=color:#b48ead>error</span><span>) {
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#bf616a>haveWAL </span><span>:= </span><span style=color:#bf616a>wal</span><span>.</span><span style=color:#bf616a>Exist</span><span>(</span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>WALDir</span><span>())
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#b48ead>switch </span><span>{
+</span><span>	</span><span style=color:#b48ead>case </span><span>!</span><span style=color:#bf616a>haveWAL </span><span>&& !</span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>NewCluster</span><span>:
+</span><span>		</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>		</span><span style=color:#bf616a>remotes </span><span>= </span><span style=color:#bf616a>existingCluster</span><span>.</span><span style=color:#bf616a>Members</span><span>()
+</span><span>		</span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>SetID</span><span>(</span><span style=color:#bf616a>types</span><span>.</span><span style=color:#bf616a>ID</span><span>(</span><span style=color:#d08770>0</span><span>), </span><span style=color:#bf616a>existingCluster</span><span>.</span><span style=color:#bf616a>ID</span><span>())
+</span><span>		</span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>SetStore</span><span>(</span><span style=color:#bf616a>st</span><span>)
+</span><span>		</span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>SetBackend</span><span>(</span><span style=color:#bf616a>be</span><span>)
+</span><span>		</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>n</span><span>, </span><span style=color:#bf616a>s</span><span>, </span><span style=color:#bf616a>w </span><span>= </span><span style=color:#bf616a>startNode</span><span>(</span><span style=color:#bf616a>cfg</span><span>, </span><span style=color:#bf616a>cl</span><span>, </span><span style=color:#d08770>nil</span><span>)
+</span><span>		</span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>SetID</span><span>(</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>existingCluster</span><span>.</span><span style=color:#bf616a>ID</span><span>())
+</span><span>
+</span><span>	</span><span style=color:#b48ead>case </span><span>!</span><span style=color:#bf616a>haveWAL </span><span>&& </span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>NewCluster</span><span>:
+</span><span>		</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>		</span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>SetStore</span><span>(</span><span style=color:#bf616a>st</span><span>)
+</span><span>		</span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>SetBackend</span><span>(</span><span style=color:#bf616a>be</span><span>)
+</span><span>		</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>n</span><span>, </span><span style=color:#bf616a>s</span><span>, </span><span style=color:#bf616a>w </span><span>= </span><span style=color:#bf616a>startNode</span><span>(</span><span style=color:#bf616a>cfg</span><span>, </span><span style=color:#bf616a>cl</span><span>, </span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>MemberIDs</span><span>())
+</span><span>		</span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>SetID</span><span>(</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>ID</span><span>())
+</span><span>
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>haveWAL</span><span>:
+</span><span>		</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>		</span><span style=color:#b48ead>if </span><span>!</span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>ForceNewCluster </span><span>{
+</span><span>			</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>cl</span><span>, </span><span style=color:#bf616a>n</span><span>, </span><span style=color:#bf616a>s</span><span>, </span><span style=color:#bf616a>w </span><span>= </span><span style=color:#bf616a>restartNode</span><span>(</span><span style=color:#bf616a>cfg</span><span>, </span><span style=color:#bf616a>snapshot</span><span>)
+</span><span>		} </span><span style=color:#b48ead>else </span><span>{
+</span><span>			</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>cl</span><span>, </span><span style=color:#bf616a>n</span><span>, </span><span style=color:#bf616a>s</span><span>, </span><span style=color:#bf616a>w </span><span>= </span><span style=color:#bf616a>restartAsStandaloneNode</span><span>(</span><span style=color:#bf616a>cfg</span><span>, </span><span style=color:#bf616a>snapshot</span><span>)
+</span><span>		}
+</span><span>
+</span><span>		</span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>SetStore</span><span>(</span><span style=color:#bf616a>st</span><span>)
+</span><span>		</span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>SetBackend</span><span>(</span><span style=color:#bf616a>be</span><span>)
+</span><span>		</span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>Recover</span><span>(</span><span style=color:#bf616a>api</span><span>.</span><span style=color:#bf616a>UpdateCapability</span><span>)
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>Version</span><span>() != </span><span style=color:#d08770>nil </span><span>&& !</span><span style=color:#bf616a>cl</span><span>.</span><span style=color:#bf616a>Version</span><span>().</span><span style=color:#bf616a>LessThan</span><span>(</span><span style=color:#bf616a>semver</span><span>.</span><span style=color:#bf616a>Version</span><span>{</span><span style=color:#bf616a>Major</span><span>: </span><span style=color:#d08770>3</span><span>}) && !</span><span style=color:#bf616a>beExist </span><span>{
+</span><span>			</span><span style=color:#bf616a>os</span><span>.</span><span style=color:#bf616a>RemoveAll</span><span>(</span><span style=color:#bf616a>bepath</span><span>)
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>fmt</span><span>.</span><span style=color:#bf616a>Errorf</span><span>("</span><span style=color:#a3be8c>database file (</span><span style=color:#d08770>%v</span><span style=color:#a3be8c>) of the backend is missing</span><span>", </span><span style=color:#bf616a>bepath</span><span>)
+</span><span>		}
+</span><span>
+</span><span>	</span><span style=color:#b48ead>default</span><span>:
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>fmt</span><span>.</span><span style=color:#bf616a>Errorf</span><span>("</span><span style=color:#a3be8c>unsupported bootstrap config</span><span>")
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>terr </span><span>:= </span><span style=color:#bf616a>fileutil</span><span>.</span><span style=color:#bf616a>TouchDirAll</span><span>(</span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>Logger</span><span>, </span><span style=color:#bf616a>cfg</span><span>.</span><span style=color:#bf616a>MemberDir</span><span>()); </span><span style=color:#bf616a>terr </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>fmt</span><span>.</span><span style=color:#bf616a>Errorf</span><span>("</span><span style=color:#a3be8c>cannot access member directory: </span><span style=color:#d08770>%v</span><span>", </span><span style=color:#bf616a>terr</span><span>)
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>srv</span><span>, </span><span style=color:#d08770>nil
+</span><span>}
+</span></code></pre><p>可以看到，这里分了不同情况去启动 raft node，包括是否有 WAL（write ahead log），是否是新集群；无论何种情况最终都会调用 <code>startNode</code> 函数启动 raft node。在 <code>startNode</code> 中会判断配置 <code>initial-cluster</code> 是否为空，如果为空，则进入 <code>raft.RestartNode</code> 函数重新校验参数，如果非法则 panic；否则调用 <code>raft.StartNode</code> 函数启动节点。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#65737e>// StartNode returns a new Node given configuration and a list of raft peers.
+</span><span style=color:#65737e>// It appends a ConfChangeAddNode entry for each given peer to the initial log.
+</span><span style=color:#65737e>//
+</span><span style=color:#65737e>// Peers must not be zero length; call RestartNode in that case.
+</span><span style=color:#b48ead>func </span><span style=color:#8fa1b3>StartNode</span><span>(</span><span style=color:#bf616a>c </span><span>*</span><span style=color:#b48ead>Config</span><span>, </span><span style=color:#bf616a>peers </span><span>[]</span><span style=color:#b48ead>Peer</span><span>) </span><span style=color:#b48ead>Node </span><span>{
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#96b5b4>len</span><span>(</span><span style=color:#bf616a>peers</span><span>) == </span><span style=color:#d08770>0 </span><span>{
+</span><span>		</span><span style=color:#96b5b4>panic</span><span>("</span><span style=color:#a3be8c>no peers given; use RestartNode instead</span><span>")
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>rn</span><span>, </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>NewRawNode</span><span>(</span><span style=color:#bf616a>c</span><span>)
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#96b5b4>panic</span><span>(</span><span style=color:#bf616a>err</span><span>)
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>rn</span><span>.</span><span style=color:#bf616a>Bootstrap</span><span>(</span><span style=color:#bf616a>peers</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#bf616a>n </span><span>:= </span><span style=color:#bf616a>newNode</span><span>(</span><span style=color:#bf616a>rn</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#b48ead>go </span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>run</span><span>()
+</span><span>	</span><span style=color:#b48ead>return </span><span>&</span><span style=color:#bf616a>n
+</span><span>}
+</span></code></pre><h1 id=raft-node-states><a aria-label="Anchor link for: raft-node-states" class=zola-anchor href=#raft-node-states>Raft node states</a></h1><p>从这里开始就进入 raft 共识算法的逻辑了。在继续阅读源码前，需要先了解 raft 共识算法状态转移过程，这样才会理解代码的运行逻辑。<p><img alt="Raft State" src=/img/etcd-raft/Raft-server-states.png><ol><li><code>start up</code>：起始状态，所有节点刚启动的时候自动进入 follower 状态<li><code>time out, start election</code>：follower 启动之后，每个节点都会开启一个心跳定时器，当这个定时器到期时，将切换到 candidate 状态并发起选举（任期号递增），每次角色转换都会随机设置一个选举超时，保证迅速选出 leader<li><code>time out, new election</code>：进入 candidate 状态后并选举，但是在选举超时，还没有选出一个新的 leader，那么还会保持 candidate 状态重新开始一次选举（任期号递增）<li><code>receives votes from majority of servers</code>：当 candidate 状态的节点，收到了超过半数的节点选票，那么将状态切换成为 leader<li><code>discovers current leader or new term</code>：candidate 状态的节点，如果收到了来自 leader 的消息，或者更高任期的消息，表示已经存在 leader，则将状态切换成 follower<li><code>discovers server with higher term</code>：leader 状态下如果收到来自更高任期号的消息，将切换到 follower 状态</ol><p>以上便是 raft node 的状态转移过程。因此当一个新节点启动时，它会进入 follower 状态，因此在 <code>raft.newRaft</code> 函数以及 <code>RawNode.Bootstrap</code> 方法中会都会调用 <code>raft.becomeFollower</code> 方法把节点置为 follower。<h1 id=leader-election><a aria-label="Anchor link for: leader-election" class=zola-anchor href=#leader-election>Leader election</a></h1><p>在 follower 的选举定时器超时，就会触发 leader election，那么选举定时器是在哪里设置的呢？首先要说明配置，在 <code>etcdmain.startEtcdOrProxyV2</code> 函数中调用了 <code>etcdmain.newConfig</code> 以及 <code>embed.NewConfig</code> 函数，这里会初始化和 Tick 有关的两个配置 <code>TickMs: 100</code> 以及 <code>ElectionMs: 1000</code>。<p>通过以上配置，会初始化 <code>ServerConfig</code> 对象，并设置 <code>ServerConfig.TickMs = TickMs</code> 以及 <span id=election-ticks><code>ServerConfig.ElectionTicks = ElectionMs / TickMs</code></span> 即 10；然后通过 <code>etcdserver.NewServer</code> 初始化 <code>EtcdServer</code> 对象，在这个对象里面包含了 raft node。接着调用 <code>EtcdServer.Start</code> 方法并调用 <code>raftNode.start</code> 方法，在这里会启用一个 goroutine 不停的处理 <code>raftNode</code> 的状态，ticker 以及存储等信息。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>go func</span><span>() {
+</span><span>    </span><span style=color:#b48ead>defer </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>onStop</span><span>()
+</span><span>    </span><span style=color:#bf616a>islead </span><span>:= </span><span style=color:#d08770>false
+</span><span>
+</span><span>    </span><span style=color:#b48ead>for </span><span>{
+</span><span>        </span><span style=color:#b48ead>select </span><span>{
+</span><span>        </span><span style=color:#b48ead>case </span><span>&lt;-</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>ticker</span><span>.</span><span style=color:#bf616a>C</span><span>:
+</span><span>            </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>tick</span><span>()
+</span><span>        </span><span style=color:#b48ead>case </span><span style=color:#bf616a>rd </span><span>:= &lt;-</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Ready</span><span>():
+</span><span>			</span><span style=color:#65737e>// ...
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre><p>在上述 <span id=heartbeat-ticker><code>r.ticker.C</code></span> 的 channel 触发超时，就代表这节点超时没有收到 leader 或者 candidate 节点的信息，因此触发超时，发起选举。这里的超时的时间设置在 <code>etcdserver.NewServer</code> 函数中，通过 <code>heartbeat := time.Duration(cfg.TickMs) * time.Millisecond</code> 即 100ms。<p>当超时触发选举会调用 <code>raftNode.tick</code> 方法：<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#65737e>// raft.Node does not have locks in Raft package
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>r </span><span>*</span><span style=color:#b48ead>raftNode</span><span>) </span><span style=color:#8fa1b3>tick</span><span>() {
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>tickMu</span><span>.</span><span style=color:#bf616a>Lock</span><span>()
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Tick</span><span>()
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>latestTickTs </span><span>= </span><span style=color:#bf616a>time</span><span>.</span><span style=color:#bf616a>Now</span><span>()
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>tickMu</span><span>.</span><span style=color:#bf616a>Unlock</span><span>()
+</span><span>}
+</span></code></pre><p>这里 <code>t.Tick</code> 方法调用，实际是调用 <code>Node</code> interface 的方法；并且在 <code>EtcdServer</code> 对象中 <code>r</code> 是 <code>RaftNode</code> 对象，而 <code>RaftNode</code> 结构体声明如下：<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>type </span><span>raftNode </span><span style=color:#b48ead>struct </span><span>{
+</span><span>	</span><span style=color:#bf616a>lg </span><span>*</span><span style=color:#bf616a>zap</span><span>.</span><span style=color:#b48ead>Logger
+</span><span>
+</span><span>	</span><span style=color:#bf616a>tickMu </span><span>*</span><span style=color:#bf616a>sync</span><span>.</span><span style=color:#b48ead>RWMutex
+</span><span>	</span><span style=color:#65737e>// timestamp of the latest tick
+</span><span>	</span><span style=color:#bf616a>latestTickTs time</span><span>.</span><span style=color:#b48ead>Time
+</span><span>	</span><span style=color:#a3be8c>raftNodeConfig
+</span><span>
+</span><span>	</span><span style=color:#65737e>// a chan to send/receive snapshot
+</span><span>	</span><span style=color:#bf616a>msgSnapC </span><span style=color:#b48ead>chan </span><span style=color:#bf616a>raftpb</span><span>.</span><span style=color:#b48ead>Message
+</span><span>
+</span><span>	</span><span style=color:#65737e>// a chan to send out apply
+</span><span>	</span><span style=color:#bf616a>applyc </span><span style=color:#b48ead>chan apply
+</span><span>
+</span><span>	</span><span style=color:#65737e>// a chan to send out readState
+</span><span>	</span><span style=color:#bf616a>readStateC </span><span style=color:#b48ead>chan </span><span style=color:#bf616a>raft</span><span>.</span><span style=color:#b48ead>ReadState
+</span><span>
+</span><span>	</span><span style=color:#65737e>// utility
+</span><span>	</span><span style=color:#bf616a>ticker </span><span>*</span><span style=color:#bf616a>time</span><span>.</span><span style=color:#b48ead>Ticker
+</span><span>	</span><span style=color:#65737e>// contention detectors for raft heartbeat message
+</span><span>	</span><span style=color:#bf616a>td </span><span>*</span><span style=color:#bf616a>contention</span><span>.</span><span style=color:#b48ead>TimeoutDetector
+</span><span>
+</span><span>	</span><span style=color:#bf616a>stopped </span><span style=color:#b48ead>chan struct</span><span>{}
+</span><span>	</span><span style=color:#bf616a>done    </span><span style=color:#b48ead>chan struct</span><span>{}
+</span><span>}
+</span><span>
+</span><span style=color:#b48ead>type </span><span>raftNodeConfig </span><span style=color:#b48ead>struct </span><span>{
+</span><span>	</span><span style=color:#bf616a>lg </span><span>*</span><span style=color:#bf616a>zap</span><span>.</span><span style=color:#b48ead>Logger
+</span><span>
+</span><span>	</span><span style=color:#65737e>// to check if msg receiver is removed from cluster
+</span><span>	</span><span style=color:#bf616a>isIDRemoved </span><span style=color:#b48ead>func</span><span>(</span><span style=color:#bf616a>id </span><span style=color:#b48ead>uint64</span><span>) </span><span style=color:#b48ead>bool
+</span><span>	</span><span style=color:#bf616a>raft</span><span>.</span><span style=color:#a3be8c>Node
+</span><span>	</span><span style=color:#bf616a>raftStorage </span><span>*</span><span style=color:#bf616a>raft</span><span>.</span><span style=color:#b48ead>MemoryStorage
+</span><span>	</span><span style=color:#bf616a>storage     </span><span style=color:#b48ead>Storage
+</span><span>	</span><span style=color:#bf616a>heartbeat   time</span><span>.</span><span style=color:#b48ead>Duration </span><span style=color:#65737e>// for logging
+</span><span>	</span><span style=color:#65737e>// transport specifies the transport to send and receive msgs to members.
+</span><span>	</span><span style=color:#65737e>// Sending messages MUST NOT block. It is okay to drop messages, since
+</span><span>	</span><span style=color:#65737e>// clients should timeout and reissue their messages.
+</span><span>	</span><span style=color:#65737e>// If transport is nil, server will panic.
+</span><span>	</span><span style=color:#bf616a>transport rafthttp</span><span>.</span><span style=color:#b48ead>Transporter
+</span><span>}
+</span></code></pre><p>可以看到，最终包含了 <code>raft.Node</code> interface，而这个 <code>raft.Node</code> interface 最终是由 <code>etcdserver.startNode</code> 函数返回的 <span id=raft-node><code>raft.node</code></span> 结构体实现。在 <code>raft.StartNode</code> 函数中会调用 <code>raft.newNode</code> 函数返回 <code>raft.node</code> 对象，并启动一个 goroutine 运行 <code>node.run</code> 方法：<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#65737e>// StartNode returns a new Node given configuration and a list of raft peers.
+</span><span style=color:#65737e>// It appends a ConfChangeAddNode entry for each given peer to the initial log.
+</span><span style=color:#65737e>//
+</span><span style=color:#65737e>// Peers must not be zero length; call RestartNode in that case.
+</span><span style=color:#b48ead>func </span><span style=color:#8fa1b3>StartNode</span><span>(</span><span style=color:#bf616a>c </span><span>*</span><span style=color:#b48ead>Config</span><span>, </span><span style=color:#bf616a>peers </span><span>[]</span><span style=color:#b48ead>Peer</span><span>) </span><span style=color:#b48ead>Node </span><span>{
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#96b5b4>len</span><span>(</span><span style=color:#bf616a>peers</span><span>) == </span><span style=color:#d08770>0 </span><span>{
+</span><span>		</span><span style=color:#96b5b4>panic</span><span>("</span><span style=color:#a3be8c>no peers given; use RestartNode instead</span><span>")
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>rn</span><span>, </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>NewRawNode</span><span>(</span><span style=color:#bf616a>c</span><span>)
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#96b5b4>panic</span><span>(</span><span style=color:#bf616a>err</span><span>)
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>rn</span><span>.</span><span style=color:#bf616a>Bootstrap</span><span>(</span><span style=color:#bf616a>peers</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#bf616a>n </span><span>:= </span><span style=color:#bf616a>newNode</span><span>(</span><span style=color:#bf616a>rn</span><span>)
+</span><span>
+</span><span>	</span><span style=color:#b48ead>go </span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>run</span><span>()
+</span><span>	</span><span style=color:#b48ead>return </span><span>&</span><span style=color:#bf616a>n
+</span><span>}
+</span></code></pre><p><code>node.run</code> 就是 raft 节点处理不同事件的方法：<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>n </span><span>*</span><span style=color:#b48ead>node</span><span>) </span><span style=color:#8fa1b3>run</span><span>() {
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#b48ead>for </span><span>{
+</span><span>		</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>		</span><span style=color:#b48ead>select </span><span>{
+</span><span>		</span><span style=color:#65737e>// TODO: maybe buffer the config propose if there exists one (the way
+</span><span>		</span><span style=color:#65737e>// described in raft dissertation)
+</span><span>		</span><span style=color:#65737e>// Currently it is dropped in Step silently.
+</span><span>		</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pm </span><span>:= &lt;-</span><span style=color:#bf616a>propc</span><span>:
+</span><span>			</span><span style=color:#bf616a>m </span><span>:= </span><span style=color:#bf616a>pm</span><span>.</span><span style=color:#bf616a>m
+</span><span>			</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From </span><span>= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id
+</span><span>			</span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Step</span><span>(</span><span style=color:#bf616a>m</span><span>)
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>pm</span><span>.</span><span style=color:#bf616a>result </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>				</span><span style=color:#bf616a>pm</span><span>.</span><span style=color:#bf616a>result </span><span>&lt;- </span><span style=color:#bf616a>err
+</span><span>				</span><span style=color:#96b5b4>close</span><span>(</span><span style=color:#bf616a>pm</span><span>.</span><span style=color:#bf616a>result</span><span>)
+</span><span>			}
+</span><span>		</span><span style=color:#b48ead>case </span><span style=color:#bf616a>m </span><span>:= &lt;-</span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>recvc</span><span>:
+</span><span>			</span><span style=color:#65737e>// filter out response message from unknown From.
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>pr </span><span>:= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>prs</span><span>.</span><span style=color:#bf616a>Progress</span><span>[</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>]; </span><span style=color:#bf616a>pr </span><span>!= </span><span style=color:#d08770>nil </span><span>|| !</span><span style=color:#bf616a>IsResponseMsg</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Type</span><span>) {
+</span><span>				</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Step</span><span>(</span><span style=color:#bf616a>m</span><span>)
+</span><span>			}
+</span><span>		</span><span style=color:#b48ead>case </span><span style=color:#bf616a>cc </span><span>:= &lt;-</span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>confc</span><span>:
+</span><span>
+</span><span>			</span><span style=color:#65737e>// ...
+</span><span>		</span><span style=color:#b48ead>case </span><span>&lt;-</span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>tickc</span><span>:
+</span><span>			</span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>rn</span><span>.</span><span style=color:#bf616a>Tick</span><span>()
+</span><span>
+</span><span>			</span><span style=color:#65737e>// ...
+</span><span>		</span><span style=color:#b48ead>case </span><span>&lt;-</span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>stop</span><span>:
+</span><span>			</span><span style=color:#96b5b4>close</span><span>(</span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>done</span><span>)
+</span><span>			</span><span style=color:#b48ead>return
+</span><span>		}
+</span><span>	}
+</span><span>}
+</span></code></pre><p>这里比较关键的有：<ul><li><code>propc</code>：处理客户端发送的请求<span id=prop-channel></span><li><code>recvc</code>：处理从其他节点接收的消息<span id=recv-channel></span><li><code>confc</code>：处理配置的变更以及集群节点变化<li><code>tickc</code>：心跳超时处理<li><code>n.stop</code>：停止信号</ul><p>因此，<strong>当上述 <a href=https://wiserfz.github.io/posts/etcd-raft/#heartbeat-ticker><code>ticker</code></a> 超时而调用 <code>r.Tick</code> 方法时，实际调用的就是 <code>raft.node.Tick</code> 方法。</strong><pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#65737e>// Tick increments the internal logical clock for this Node. Election timeouts
+</span><span style=color:#65737e>// and heartbeat timeouts are in units of ticks.
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>n </span><span>*</span><span style=color:#b48ead>node</span><span>) </span><span style=color:#8fa1b3>Tick</span><span>() {
+</span><span>	</span><span style=color:#b48ead>select </span><span>{
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>tickc </span><span>&lt;- </span><span style=color:#b48ead>struct</span><span>{}{}:
+</span><span>	</span><span style=color:#b48ead>case </span><span>&lt;-</span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>done</span><span>:
+</span><span>	</span><span style=color:#b48ead>default</span><span>:
+</span><span>		</span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>rn</span><span>.</span><span style=color:#bf616a>raft</span><span>.</span><span style=color:#bf616a>logger</span><span>.</span><span style=color:#bf616a>Warningf</span><span>("</span><span style=color:#d08770>%x</span><span style=color:#a3be8c> A tick missed to fire. Node blocks too long!</span><span>", </span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>rn</span><span>.</span><span style=color:#bf616a>raft</span><span>.</span><span style=color:#bf616a>id</span><span>)
+</span><span>	}
+</span><span>}
+</span></code></pre><p>当一个 follower 收到超时信号，就会调用 <code>raft.RawNode.raft.tick</code> 函数，而不同的角色这个 tick 函数是不同的，分别在 <code>raft.becomeFollower</code>，<code>raft.becomeCandidate</code> 以及 <code>raft.becomeLeader</code> 中设置，这里方便后续说明统一称为 <code>become</code><sup class=footnote-reference><a href=#1>1</a></sup> 方法，另外不同角色还有 <code>step</code><sup class=footnote-reference><a href=#2>2</a></sup> 函数用于处理接收的消息。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>r </span><span>*</span><span style=color:#b48ead>raft</span><span>) </span><span style=color:#8fa1b3>becomeFollower</span><span>(</span><span style=color:#bf616a>term </span><span style=color:#b48ead>uint64</span><span>, </span><span style=color:#bf616a>lead </span><span style=color:#b48ead>uint64</span><span>) {
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>step </span><span>= </span><span style=color:#bf616a>stepFollower
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>reset</span><span>(</span><span style=color:#bf616a>term</span><span>)
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>tick </span><span>= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>tickElection
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>lead </span><span>= </span><span style=color:#bf616a>lead
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>state </span><span>= </span><span style=color:#bf616a>StateFollower
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>logger</span><span>.</span><span style=color:#bf616a>Infof</span><span>("</span><span style=color:#d08770>%x</span><span style=color:#a3be8c> became follower at term </span><span style=color:#d08770>%d</span><span>", </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Term</span><span>)
+</span><span>}
+</span><span>
+</span><span style=color:#65737e>// tickElection is run by followers and candidates after r.electionTimeout.
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>r </span><span>*</span><span style=color:#b48ead>raft</span><span>) </span><span style=color:#8fa1b3>tickElection</span><span>() {
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>electionElapsed</span><span>++
+</span><span>
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>promotable</span><span>() && </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>pastElectionTimeout</span><span>() {
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>electionElapsed </span><span>= </span><span style=color:#d08770>0
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Step</span><span>(</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>Message</span><span>{</span><span style=color:#bf616a>From</span><span>: </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>Type</span><span>: </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgHup</span><span>})
+</span><span>	}
+</span><span>}
+</span></code></pre><p>可以看到，当触发超时，follower 会给自己发送 <code>MsgHup</code> 消息，在 <code>raft.Step</code> 函数中会根据不同的消息类型做不同的处理。在处理 <code>MsgHup</code> 消息会调用 <code>raft.hup</code> 方法以及 <code>raft.campaign</code> 方法。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>r </span><span>*</span><span style=color:#b48ead>raft</span><span>) </span><span style=color:#8fa1b3>campaign</span><span>(</span><span style=color:#bf616a>t </span><span style=color:#b48ead>CampaignType</span><span>) {
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#b48ead>var </span><span style=color:#bf616a>term </span><span style=color:#b48ead>uint64
+</span><span>	</span><span style=color:#b48ead>var </span><span style=color:#bf616a>voteMsg pb</span><span>.</span><span style=color:#b48ead>MessageType
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>t </span><span>== </span><span style=color:#bf616a>campaignPreElection </span><span>{
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>becomePreCandidate</span><span>()
+</span><span>		</span><span style=color:#bf616a>voteMsg </span><span>= </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgPreVote
+</span><span>		</span><span style=color:#65737e>// PreVote RPCs are sent for the next term before we've incremented r.Term.
+</span><span>		</span><span style=color:#bf616a>term </span><span>= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Term </span><span>+ </span><span style=color:#d08770>1
+</span><span>	} </span><span style=color:#b48ead>else </span><span>{
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>becomeCandidate</span><span>()
+</span><span>		</span><span style=color:#bf616a>voteMsg </span><span>= </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgVote
+</span><span>		</span><span style=color:#bf616a>term </span><span>= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Term
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>_</span><span>, </span><span style=color:#bf616a>_</span><span>, </span><span style=color:#bf616a>res </span><span>:= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>poll</span><span>(</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>voteRespMsgType</span><span>(</span><span style=color:#bf616a>voteMsg</span><span>), </span><span style=color:#d08770>true</span><span>); </span><span style=color:#bf616a>res </span><span>== </span><span style=color:#bf616a>quorum</span><span>.</span><span style=color:#bf616a>VoteWon </span><span>{
+</span><span>		</span><span style=color:#65737e>// We won the election after voting for ourselves (which must mean that
+</span><span>		</span><span style=color:#65737e>// this is a single-node cluster). Advance to the next state.
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>t </span><span>== </span><span style=color:#bf616a>campaignPreElection </span><span>{
+</span><span>			</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>campaign</span><span>(</span><span style=color:#bf616a>campaignElection</span><span>)
+</span><span>		} </span><span style=color:#b48ead>else </span><span>{
+</span><span>			</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>becomeLeader</span><span>()
+</span><span>		}
+</span><span>		</span><span style=color:#b48ead>return
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>var </span><span style=color:#bf616a>ids </span><span>[]</span><span style=color:#b48ead>uint64
+</span><span>	{
+</span><span>		</span><span style=color:#bf616a>idMap </span><span>:= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>prs</span><span>.</span><span style=color:#bf616a>Voters</span><span>.</span><span style=color:#bf616a>IDs</span><span>()
+</span><span>		</span><span style=color:#bf616a>ids </span><span>= </span><span style=color:#96b5b4>make</span><span>([]</span><span style=color:#b48ead>uint64</span><span>, </span><span style=color:#d08770>0</span><span>, </span><span style=color:#96b5b4>len</span><span>(</span><span style=color:#bf616a>idMap</span><span>))
+</span><span>		</span><span style=color:#b48ead>for </span><span style=color:#bf616a>id </span><span>:= </span><span style=color:#b48ead>range </span><span style=color:#bf616a>idMap </span><span>{
+</span><span>			</span><span style=color:#bf616a>ids </span><span>= </span><span style=color:#96b5b4>append</span><span>(</span><span style=color:#bf616a>ids</span><span>, </span><span style=color:#bf616a>id</span><span>)
+</span><span>		}
+</span><span>		</span><span style=color:#bf616a>sort</span><span>.</span><span style=color:#bf616a>Slice</span><span>(</span><span style=color:#bf616a>ids</span><span>, </span><span style=color:#b48ead>func</span><span>(</span><span style=color:#bf616a>i</span><span>, </span><span style=color:#bf616a>j </span><span style=color:#b48ead>int</span><span>) </span><span style=color:#b48ead>bool </span><span>{ </span><span style=color:#b48ead>return </span><span style=color:#bf616a>ids</span><span>[</span><span style=color:#bf616a>i</span><span>] &lt; </span><span style=color:#bf616a>ids</span><span>[</span><span style=color:#bf616a>j</span><span>] })
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>for </span><span style=color:#bf616a>_</span><span>, </span><span style=color:#bf616a>id </span><span>:= </span><span style=color:#b48ead>range </span><span style=color:#bf616a>ids </span><span>{
+</span><span>
+</span><span>		</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>send</span><span>(</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>Message</span><span>{</span><span style=color:#bf616a>Term</span><span>: </span><span style=color:#bf616a>term</span><span>, </span><span style=color:#bf616a>To</span><span>: </span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>Type</span><span>: </span><span style=color:#bf616a>voteMsg</span><span>, </span><span style=color:#bf616a>Index</span><span>: </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>raftLog</span><span>.</span><span style=color:#bf616a>lastIndex</span><span>(), </span><span style=color:#bf616a>LogTerm</span><span>: </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>raftLog</span><span>.</span><span style=color:#bf616a>lastTerm</span><span>(), </span><span style=color:#bf616a>Context</span><span>: </span><span style=color:#bf616a>ctx</span><span>})
+</span><span>	}
+</span><span>}
+</span></code></pre><p><strong>Follower 节点会把自己变为 candidate 角色并增大 term，然后给其他节点发送 <code>voteMsg</code>，发起选举。</strong><p>这里特别说明以下，在 <code>becomeFollower</code>，<code>becomeCandidate</code> 以及 <code>becomeLeader</code> 方法中，都会调用 <code>raft.reset</code> 方法，在 <code>reset</code> 方法中会调用 <code>resetRandomizedElectionTimeout</code> 方法：<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>r </span><span>*</span><span style=color:#b48ead>raft</span><span>) </span><span style=color:#8fa1b3>resetRandomizedElectionTimeout</span><span>() {
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>randomizedElectionTimeout </span><span>= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>electionTimeout </span><span>+ </span><span style=color:#bf616a>globalRand</span><span>.</span><span style=color:#bf616a>Intn</span><span>(</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>electionTimeout</span><span>)
+</span><span>}
+</span></code></pre><p>因此，每次的角色转换都会随机设置 <code>randomizedElectionTimeout</code> 字段，其中 <code>electionTimeout</code> 是在 <code>raft.newRaft</code> 函数中初始化为上述的 <a href=https://wiserfz.github.io/posts/etcd-raft/#election-ticks><code>ElectionTicks</code></a>。<p>当节点变为 candidate 时，会先调用 <code>becomeCandidate</code> 方法，然后处于 candidate 角色的节点，在每次心跳超时，都会调用 <code>raft.tickElection</code> 方法，并增大 <code>electionElapsed</code>；当 <code>electionElapsed</code> 大于等于 <code>randomizedElectionTimeout</code> 时，还没有选举出 leader，说明当前集群中可能有其他节点也发起了 leader election 并造成平票的情况；因此，它会再次调用 <code>raft.Step</code> 方法并发送 <code>MsgHup</code> 消息，接着增大 term 并重置 <code>randomizedElectionTimeout</code>，如此循环直到选出 leader 节点。<p>处于其他角色的节点收到 <code>voteMsg</code> 消息时，会判断消息的 term 与自身节点的 term，如果比自己大，则会通过 <code>raft.Step</code> 方法中的逻辑判断自己是否能够投票，并且是投赞成票还是反对票。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgVote</span><span>, </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgPreVote</span><span>:
+</span><span>		</span><span style=color:#65737e>// We can vote if this is a repeat of a vote we've already cast...
+</span><span>		</span><span style=color:#bf616a>canVote </span><span>:= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Vote </span><span>== </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From </span><span>||
+</span><span>			</span><span style=color:#65737e>// ...we haven't voted and we don't think there's a leader yet in this term...
+</span><span>			(</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Vote </span><span>== </span><span style=color:#bf616a>None </span><span>&& </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>lead </span><span>== </span><span style=color:#bf616a>None</span><span>) ||
+</span><span>			</span><span style=color:#65737e>// ...or this is a PreVote for a future term...
+</span><span>			(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Type </span><span>== </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgPreVote </span><span>&& </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Term </span><span>> </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Term</span><span>)
+</span><span>		</span><span style=color:#65737e>// ...and we believe the candidate is up to date.
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>canVote </span><span>&& </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>raftLog</span><span>.</span><span style=color:#bf616a>isUpToDate</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Index</span><span>, </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>LogTerm</span><span>) {
+</span><span>			</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>send</span><span>(</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>Message</span><span>{</span><span style=color:#bf616a>To</span><span>: </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>, </span><span style=color:#bf616a>Term</span><span>: </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Term</span><span>, </span><span style=color:#bf616a>Type</span><span>: </span><span style=color:#bf616a>voteRespMsgType</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Type</span><span>)})
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Type </span><span>== </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgVote </span><span>{
+</span><span>				</span><span style=color:#65737e>// Only record real votes.
+</span><span>				</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>electionElapsed </span><span>= </span><span style=color:#d08770>0
+</span><span>				</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Vote </span><span>= </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From
+</span><span>			}
+</span><span>		} </span><span style=color:#b48ead>else </span><span>{
+</span><span>			</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>send</span><span>(</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>Message</span><span>{</span><span style=color:#bf616a>To</span><span>: </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>, </span><span style=color:#bf616a>Term</span><span>: </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Term</span><span>, </span><span style=color:#bf616a>Type</span><span>: </span><span style=color:#bf616a>voteRespMsgType</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Type</span><span>), </span><span style=color:#bf616a>Reject</span><span>: </span><span style=color:#d08770>true</span><span>})
+</span><span>		}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>
+</span></code></pre><p>处于 candidate 角色的节点，通过上述 <a href=https://wiserfz.github.io/posts/etcd-raft/#recv-channel><code>recvc</code></a> channel 收到消息会调用 <code>raft.Step</code> 函数以及 <code>raft.step</code> 方法，<code>raft.step</code> 方法每个角色不同，并在 <code>become</code> 方法中设置；因此，对于 candidate 角色的节点来说 <code>raft.step</code> 方法就是 <code>raft.stepCandidate</code> 函数。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#65737e>// stepCandidate is shared by StateCandidate and StatePreCandidate; the difference is
+</span><span style=color:#65737e>// whether they respond to MsgVoteResp or MsgPreVoteResp.
+</span><span style=color:#b48ead>func </span><span style=color:#8fa1b3>stepCandidate</span><span>(</span><span style=color:#bf616a>r </span><span>*</span><span style=color:#b48ead>raft</span><span>, </span><span style=color:#bf616a>m pb</span><span>.</span><span style=color:#b48ead>Message</span><span>) </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#65737e>// Only handle vote responses corresponding to our candidacy (while in
+</span><span>	</span><span style=color:#65737e>// StateCandidate, we may get stale MsgPreVoteResp messages in this term from
+</span><span>	</span><span style=color:#65737e>// our pre-candidate state).
+</span><span>	</span><span style=color:#b48ead>var </span><span style=color:#bf616a>myVoteRespType pb</span><span>.</span><span style=color:#b48ead>MessageType
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>state </span><span>== </span><span style=color:#bf616a>StatePreCandidate </span><span>{
+</span><span>		</span><span style=color:#bf616a>myVoteRespType </span><span>= </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgPreVoteResp
+</span><span>	} </span><span style=color:#b48ead>else </span><span>{
+</span><span>		</span><span style=color:#bf616a>myVoteRespType </span><span>= </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgVoteResp
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>switch </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Type </span><span>{
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgProp</span><span>:
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>logger</span><span>.</span><span style=color:#bf616a>Infof</span><span>("</span><span style=color:#d08770>%x</span><span style=color:#a3be8c> no leader at term </span><span style=color:#d08770>%d</span><span style=color:#a3be8c>; dropping proposal</span><span>", </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Term</span><span>)
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ErrProposalDropped
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgApp</span><span>:
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>becomeFollower</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Term</span><span>, </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>) </span><span style=color:#65737e>// always m.Term == r.Term
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>handleAppendEntries</span><span>(</span><span style=color:#bf616a>m</span><span>)
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgHeartbeat</span><span>:
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>becomeFollower</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Term</span><span>, </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>) </span><span style=color:#65737e>// always m.Term == r.Term
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>handleHeartbeat</span><span>(</span><span style=color:#bf616a>m</span><span>)
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgSnap</span><span>:
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>becomeFollower</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Term</span><span>, </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>) </span><span style=color:#65737e>// always m.Term == r.Term
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>handleSnapshot</span><span>(</span><span style=color:#bf616a>m</span><span>)
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>myVoteRespType</span><span>:
+</span><span>		</span><span style=color:#bf616a>gr</span><span>, </span><span style=color:#bf616a>rj</span><span>, </span><span style=color:#bf616a>res </span><span>:= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>poll</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>, </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Type</span><span>, !</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Reject</span><span>)
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>logger</span><span>.</span><span style=color:#bf616a>Infof</span><span>("</span><span style=color:#d08770>%x</span><span style=color:#a3be8c> has received </span><span style=color:#d08770>%d %s</span><span style=color:#a3be8c> votes and </span><span style=color:#d08770>%d</span><span style=color:#a3be8c> vote rejections</span><span>", </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>gr</span><span>, </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Type</span><span>, </span><span style=color:#bf616a>rj</span><span>)
+</span><span>		</span><span style=color:#b48ead>switch </span><span style=color:#bf616a>res </span><span>{
+</span><span>		</span><span style=color:#b48ead>case </span><span style=color:#bf616a>quorum</span><span>.</span><span style=color:#bf616a>VoteWon</span><span>:
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>state </span><span>== </span><span style=color:#bf616a>StatePreCandidate </span><span>{
+</span><span>				</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>campaign</span><span>(</span><span style=color:#bf616a>campaignElection</span><span>)
+</span><span>			} </span><span style=color:#b48ead>else </span><span>{
+</span><span>				</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>becomeLeader</span><span>()
+</span><span>				</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>bcastAppend</span><span>()
+</span><span>			}
+</span><span>		</span><span style=color:#b48ead>case </span><span style=color:#bf616a>quorum</span><span>.</span><span style=color:#bf616a>VoteLost</span><span>:
+</span><span>			</span><span style=color:#65737e>// pb.MsgPreVoteResp contains future term of pre-candidate
+</span><span>			</span><span style=color:#65737e>// m.Term > r.Term; reuse r.Term
+</span><span>			</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>becomeFollower</span><span>(</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Term</span><span>, </span><span style=color:#bf616a>None</span><span>)
+</span><span>		}
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgTimeoutNow</span><span>:
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>logger</span><span>.</span><span style=color:#bf616a>Debugf</span><span>("</span><span style=color:#d08770>%x</span><span style=color:#a3be8c> [term </span><span style=color:#d08770>%d</span><span style=color:#a3be8c> state </span><span style=color:#d08770>%v</span><span style=color:#a3be8c>] ignored MsgTimeoutNow from </span><span style=color:#d08770>%x</span><span>", </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Term</span><span>, </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>state</span><span>, </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>)
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>}
+</span></code></pre><p>在这个函数中，对于不同消息类型，candidate 节点会做不同的处理逻辑；当收到 <code>MsgVoteResp</code> 消息时，会调用 <code>raft.poll</code> 方法统计收到的票数；总共有三种结果：<ul><li><code>quorum.VoteWon</code>：表示赢得选举，变成 leader<li><code>quorum.VoteLost</code>：表示选举失败，变成 follower<li><code>quorum.VotePending</code>：等待下一个 <code>MsgVoteResp</code> 消息</ul><p>在上述 <a href=https://wiserfz.github.io/posts/etcd-raft/#raft-node-states>raft 节点状态</a>转换的其他情况，都可以在 <code>become</code> 方法以及 <code>step</code> 函数中找到对应的状态转换。<h1 id=leader-term><a aria-label="Anchor link for: leader-term" class=zola-anchor href=#leader-term>Leader term</a></h1><p>当一个节点选举成为 leader 后，leader 节点对收到的消息或者心跳的发送，都在 <code>raft.stepLeader</code> 函数中：<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span style=color:#8fa1b3>stepLeader</span><span>(</span><span style=color:#bf616a>r </span><span>*</span><span style=color:#b48ead>raft</span><span>, </span><span style=color:#bf616a>m pb</span><span>.</span><span style=color:#b48ead>Message</span><span>) </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#65737e>// These message types do not require any progress for m.From.
+</span><span>	</span><span style=color:#b48ead>switch </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Type </span><span>{
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgBeat</span><span>:
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>bcastHeartbeat</span><span>()
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgCheckQuorum</span><span>:
+</span><span>		</span><span style=color:#65737e>// The leader should always see itself as active. As a precaution, handle
+</span><span>		</span><span style=color:#65737e>// the case in which the leader isn't in the configuration any more (for
+</span><span>		</span><span style=color:#65737e>// example if it just removed itself).
+</span><span>		</span><span style=color:#65737e>//
+</span><span>		</span><span style=color:#65737e>// TODO(tbg): I added a TODO in removeNode, it doesn't seem that the
+</span><span>		</span><span style=color:#65737e>// leader steps down when removing itself. I might be missing something.
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>pr </span><span>:= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>prs</span><span>.</span><span style=color:#bf616a>Progress</span><span>[</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>]; </span><span style=color:#bf616a>pr </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>RecentActive </span><span>= </span><span style=color:#d08770>true
+</span><span>		}
+</span><span>		</span><span style=color:#b48ead>if </span><span>!</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>prs</span><span>.</span><span style=color:#bf616a>QuorumActive</span><span>() {
+</span><span>			</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>logger</span><span>.</span><span style=color:#bf616a>Warningf</span><span>("</span><span style=color:#d08770>%x</span><span style=color:#a3be8c> stepped down to follower since quorum is not active</span><span>", </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>)
+</span><span>			</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>becomeFollower</span><span>(</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Term</span><span>, </span><span style=color:#bf616a>None</span><span>)
+</span><span>		}
+</span><span>		</span><span style=color:#65737e>// Mark everyone (but ourselves) as inactive in preparation for the next
+</span><span>		</span><span style=color:#65737e>// CheckQuorum.
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>prs</span><span>.</span><span style=color:#bf616a>Visit</span><span>(</span><span style=color:#b48ead>func</span><span>(</span><span style=color:#bf616a>id </span><span style=color:#b48ead>uint64</span><span>, </span><span style=color:#bf616a>pr </span><span>*</span><span style=color:#bf616a>tracker</span><span>.</span><span style=color:#b48ead>Progress</span><span>) {
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>id </span><span>!= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id </span><span>{
+</span><span>				</span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>RecentActive </span><span>= </span><span style=color:#d08770>false
+</span><span>			}
+</span><span>		})
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgProp</span><span>:
+</span><span>		</span><span style=color:#65737e>// ...
+</span><span>
+</span><span>		</span><span style=color:#b48ead>if </span><span>!</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>appendEntry</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Entries</span><span>...) {
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ErrProposalDropped
+</span><span>		}
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>bcastAppend</span><span>()
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>
+</span><span>		</span><span style=color:#65737e>// ...
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#65737e>// All other message types require a progress for m.From (pr).
+</span><span>	</span><span style=color:#bf616a>pr </span><span>:= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>prs</span><span>.</span><span style=color:#bf616a>Progress</span><span>[</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>]
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>pr </span><span>== </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>logger</span><span>.</span><span style=color:#bf616a>Debugf</span><span>("</span><span style=color:#d08770>%x</span><span style=color:#a3be8c> no progress available for </span><span style=color:#d08770>%x</span><span>", </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>)
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>switch </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Type </span><span>{
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgAppResp</span><span>:
+</span><span>		</span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>RecentActive </span><span>= </span><span style=color:#d08770>true
+</span><span>
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Reject </span><span>{
+</span><span>			</span><span style=color:#bf616a>nextProbeIdx </span><span>:= </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>RejectHint
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>LogTerm </span><span>> </span><span style=color:#d08770>0 </span><span>{
+</span><span>				</span><span style=color:#bf616a>nextProbeIdx </span><span>= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>raftLog</span><span>.</span><span style=color:#bf616a>findConflictByTerm</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>RejectHint</span><span>, </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>LogTerm</span><span>)
+</span><span>			}
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>MaybeDecrTo</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Index</span><span>, </span><span style=color:#bf616a>nextProbeIdx</span><span>) {
+</span><span>				</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>logger</span><span>.</span><span style=color:#bf616a>Debugf</span><span>("</span><span style=color:#d08770>%x</span><span style=color:#a3be8c> decreased progress of </span><span style=color:#d08770>%x</span><span style=color:#a3be8c> to [</span><span style=color:#d08770>%s</span><span style=color:#a3be8c>]</span><span>", </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>, </span><span style=color:#bf616a>pr</span><span>)
+</span><span>				</span><span style=color:#b48ead>if </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>State </span><span>== </span><span style=color:#bf616a>tracker</span><span>.</span><span style=color:#bf616a>StateReplicate </span><span>{
+</span><span>					</span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>BecomeProbe</span><span>()
+</span><span>				}
+</span><span>				</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>sendAppend</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>)
+</span><span>			}
+</span><span>		} </span><span style=color:#b48ead>else </span><span>{
+</span><span>			</span><span style=color:#bf616a>oldPaused </span><span>:= </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>IsPaused</span><span>()
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>MaybeUpdate</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Index</span><span>) {
+</span><span>				</span><span style=color:#b48ead>switch </span><span>{
+</span><span>				</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>State </span><span>== </span><span style=color:#bf616a>tracker</span><span>.</span><span style=color:#bf616a>StateProbe</span><span>:
+</span><span>					</span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>BecomeReplicate</span><span>()
+</span><span>				</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>State </span><span>== </span><span style=color:#bf616a>tracker</span><span>.</span><span style=color:#bf616a>StateSnapshot </span><span>&& </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>Match </span><span>>= </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>PendingSnapshot</span><span>:
+</span><span>					</span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>BecomeProbe</span><span>()
+</span><span>					</span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>BecomeReplicate</span><span>()
+</span><span>				</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>State </span><span>== </span><span style=color:#bf616a>tracker</span><span>.</span><span style=color:#bf616a>StateReplicate</span><span>:
+</span><span>					</span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>Inflights</span><span>.</span><span style=color:#bf616a>FreeLE</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Index</span><span>)
+</span><span>				}
+</span><span>
+</span><span>				</span><span style=color:#b48ead>if </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>maybeCommit</span><span>() {
+</span><span>					</span><span style=color:#65737e>// committed index has progressed for the term, so it is safe
+</span><span>					</span><span style=color:#65737e>// to respond to pending read index requests
+</span><span>					</span><span style=color:#bf616a>releasePendingReadIndexMessages</span><span>(</span><span style=color:#bf616a>r</span><span>)
+</span><span>					</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>bcastAppend</span><span>()
+</span><span>				} </span><span style=color:#b48ead>else if </span><span style=color:#bf616a>oldPaused </span><span>{
+</span><span>					</span><span style=color:#65737e>// If we were paused before, this node may be missing the
+</span><span>					</span><span style=color:#65737e>// latest commit index, so send it.
+</span><span>					</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>sendAppend</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>)
+</span><span>				}
+</span><span>				</span><span style=color:#65737e>// We've updated flow control information above, which may
+</span><span>				</span><span style=color:#65737e>// allow us to send multiple (size-limited) in-flight messages
+</span><span>				</span><span style=color:#65737e>// at once (such as when transitioning from probe to
+</span><span>				</span><span style=color:#65737e>// replicate, or when freeTo() covers multiple messages). If
+</span><span>				</span><span style=color:#65737e>// we have more entries to send, send as many messages as we
+</span><span>				</span><span style=color:#65737e>// can (without sending empty messages for the commit index)
+</span><span>				</span><span style=color:#b48ead>for </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>maybeSendAppend</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>, </span><span style=color:#d08770>false</span><span>) {
+</span><span>				}
+</span><span>				</span><span style=color:#65737e>// Transfer leadership is in progress.
+</span><span>				</span><span style=color:#b48ead>if </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From </span><span>== </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>leadTransferee </span><span>&& </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>Match </span><span>== </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>raftLog</span><span>.</span><span style=color:#bf616a>lastIndex</span><span>() {
+</span><span>					</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>logger</span><span>.</span><span style=color:#bf616a>Infof</span><span>("</span><span style=color:#d08770>%x</span><span style=color:#a3be8c> sent MsgTimeoutNow to </span><span style=color:#d08770>%x</span><span style=color:#a3be8c> after received MsgAppResp</span><span>", </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>)
+</span><span>					</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>sendTimeoutNow</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>)
+</span><span>				}
+</span><span>			}
+</span><span>		}
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgHeartbeatResp</span><span>:
+</span><span>		</span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>RecentActive </span><span>= </span><span style=color:#d08770>true
+</span><span>		</span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>ProbeSent </span><span>= </span><span style=color:#d08770>false
+</span><span>
+</span><span>		</span><span style=color:#65737e>// free one slot for the full inflights window to allow progress.
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>State </span><span>== </span><span style=color:#bf616a>tracker</span><span>.</span><span style=color:#bf616a>StateReplicate </span><span>&& </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>Inflights</span><span>.</span><span style=color:#bf616a>Full</span><span>() {
+</span><span>			</span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>Inflights</span><span>.</span><span style=color:#bf616a>FreeFirstOne</span><span>()
+</span><span>		}
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>pr</span><span>.</span><span style=color:#bf616a>Match </span><span>&lt; </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>raftLog</span><span>.</span><span style=color:#bf616a>lastIndex</span><span>() {
+</span><span>			</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>sendAppend</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>)
+</span><span>		}
+</span><span>
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>readOnly</span><span>.</span><span style=color:#bf616a>option </span><span>!= </span><span style=color:#bf616a>ReadOnlySafe </span><span>|| </span><span style=color:#96b5b4>len</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Context</span><span>) == </span><span style=color:#d08770>0 </span><span>{
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>		}
+</span><span>
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>prs</span><span>.</span><span style=color:#bf616a>Voters</span><span>.</span><span style=color:#bf616a>VoteResult</span><span>(</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>readOnly</span><span>.</span><span style=color:#bf616a>recvAck</span><span>(</span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>From</span><span>, </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Context</span><span>)) != </span><span style=color:#bf616a>quorum</span><span>.</span><span style=color:#bf616a>VoteWon </span><span>{
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>		}
+</span><span>
+</span><span>		</span><span style=color:#bf616a>rss </span><span>:= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>readOnly</span><span>.</span><span style=color:#bf616a>advance</span><span>(</span><span style=color:#bf616a>m</span><span>)
+</span><span>		</span><span style=color:#b48ead>for </span><span style=color:#bf616a>_</span><span>, </span><span style=color:#bf616a>rs </span><span>:= </span><span style=color:#b48ead>range </span><span style=color:#bf616a>rss </span><span>{
+</span><span>			</span><span style=color:#b48ead>if </span><span style=color:#bf616a>resp </span><span>:= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>responseToReadIndexReq</span><span>(</span><span style=color:#bf616a>rs</span><span>.</span><span style=color:#bf616a>req</span><span>, </span><span style=color:#bf616a>rs</span><span>.</span><span style=color:#bf616a>index</span><span>); </span><span style=color:#bf616a>resp</span><span>.</span><span style=color:#bf616a>To </span><span>!= </span><span style=color:#bf616a>None </span><span>{
+</span><span>				</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>send</span><span>(</span><span style=color:#bf616a>resp</span><span>)
+</span><span>			}
+</span><span>		}
+</span><span>	</span><span style=color:#65737e>// ...
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>}
+</span><span>
+</span></code></pre><p>主要分析发送 <code>MsgHeartbeat</code> 和 <code>MsgApp</code> 以及接收 <code>MsgHeartbeatResp</code> 和 <code>MsgAppResp</code> 的逻辑。<h2 id=heartbeat><a aria-label="Anchor link for: heartbeat" class=zola-anchor href=#heartbeat>Heartbeat</a></h2><p>Leader 节点的会通过心跳机制维持它的权威，因此当 leader 节点的 ticker 超时，会触发 <code>raft.tickHeartbeat</code> 函数。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#65737e>// tickHeartbeat is run by leaders to send a MsgBeat after r.heartbeatTimeout.
+</span><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>r </span><span>*</span><span style=color:#b48ead>raft</span><span>) </span><span style=color:#8fa1b3>tickHeartbeat</span><span>() {
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>heartbeatElapsed</span><span>++
+</span><span>	</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>electionElapsed</span><span>++
+</span><span>
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>electionElapsed </span><span>>= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>electionTimeout </span><span>{
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>electionElapsed </span><span>= </span><span style=color:#d08770>0
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>checkQuorum </span><span>{
+</span><span>			</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Step</span><span>(</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>Message</span><span>{</span><span style=color:#bf616a>From</span><span>: </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>Type</span><span>: </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgCheckQuorum</span><span>})
+</span><span>		}
+</span><span>		</span><span style=color:#65737e>// If current leader cannot transfer leadership in electionTimeout, it becomes leader again.
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>state </span><span>== </span><span style=color:#bf616a>StateLeader </span><span>&& </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>leadTransferee </span><span>!= </span><span style=color:#bf616a>None </span><span>{
+</span><span>			</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>abortLeaderTransfer</span><span>()
+</span><span>		}
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>state </span><span>!= </span><span style=color:#bf616a>StateLeader </span><span>{
+</span><span>		</span><span style=color:#b48ead>return
+</span><span>	}
+</span><span>
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>heartbeatElapsed </span><span>>= </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>heartbeatTimeout </span><span>{
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>heartbeatElapsed </span><span>= </span><span style=color:#d08770>0
+</span><span>		</span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>Step</span><span>(</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>Message</span><span>{</span><span style=color:#bf616a>From</span><span>: </span><span style=color:#bf616a>r</span><span>.</span><span style=color:#bf616a>id</span><span>, </span><span style=color:#bf616a>Type</span><span>: </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgBeat</span><span>})
+</span><span>	}
+</span><span>}
+</span></code></pre><p>在 <code>tickHeartbeat</code> 函数中，最要包含两个逻辑：<ol><li><p>触发检查机制：当 leader 节点的选举超时后，会发送 <code>MsgCheckQuorum</code> 消息给自己，在 <code>raft.stepLeader</code> 函数中，收到该消息后会检查与自己保持通信的 follower 节点，查看 follower 是否仍然满足半数以上的数量，如果不满足，则自己变为 follower 节点；这里的检查机制是通过 <code>RecentActive</code> 字段判断，当收到 follower 节点的 <code>MsgAppResp</code> 或者 <code>MsgHeartbeatResp</code> 消息后，就会把 <code>RecentActive</code> 置为 ture，而检查结束后，就会把该字段置为 false；因此检查时就根据该字段判断 follower 是否仍与自己保持通信。</p><li><p>触发心跳机制：这里 <code>heartbeatTimeout</code> 的值为 1，因此当 leader 节点的 ticker 超时，就会触发心跳机制，发送 <code>MsgBeat</code> 消息，在 <code>raft.stepLeader</code> 中，当收到 <code>MsgBeat</code> 消息，会调用 <code>raft.bcastHeartbeat</code> 方法，在该方法中会给 follower 节点发送 <code>MsgHeartbeat</code> 消息；当 follower 节点收到 <code>MsgHeartbeat</code> 消息时，会把自身的 <code>electionElapsed</code> 置为 0，防止发生超时发起选举，并回复 <code>MsgHeartbeatResp</code> 消息。</p></ol><h2 id=propose><a aria-label="Anchor link for: propose" class=zola-anchor href=#propose>Propose</a></h2><p>在 <code>server/etcdserver/v3_server.go</code> 文件中，<code>EtcdServer</code> 会实现 <code>api/etcdserverpb/rpc.proto</code> 文件中定义的 service <code>KV</code>，以 <code>rpc Put(PutRequest) return (PutResponse)</code> 为例：<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>s </span><span>*</span><span style=color:#b48ead>EtcdServer</span><span>) </span><span style=color:#8fa1b3>Put</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>r </span><span>*</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#b48ead>PutRequest</span><span>) (*</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#b48ead>PutResponse</span><span>, </span><span style=color:#b48ead>error</span><span>) {
+</span><span>	</span><span style=color:#bf616a>ctx </span><span>= </span><span style=color:#bf616a>context</span><span>.</span><span style=color:#bf616a>WithValue</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>traceutil</span><span>.</span><span style=color:#bf616a>StartTimeKey</span><span>, </span><span style=color:#bf616a>time</span><span>.</span><span style=color:#bf616a>Now</span><span>())
+</span><span>	</span><span style=color:#bf616a>resp</span><span>, </span><span style=color:#bf616a>err </span><span>:= </span><span style=color:#bf616a>s</span><span>.</span><span style=color:#bf616a>raftRequest</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>InternalRaftRequest</span><span>{</span><span style=color:#bf616a>Put</span><span>: </span><span style=color:#bf616a>r</span><span>})
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil</span><span>, </span><span style=color:#bf616a>err
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>resp</span><span>.(*</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#b48ead>PutResponse</span><span>), </span><span style=color:#d08770>nil
+</span><span>}
+</span></code></pre><p><code>EtcdServer</code> 会调用 <code>EtcdServer.raftRequest</code> 方法并依次调用 <code>EtcdServer.raftRequestOnce</code>，<code>EtcdServer.processInternalRaftRequestOnce</code> 方法，最终调用到 <code>raft.Node</code> 接口的 <code>Propose</code> 方法；在上述过程中可得治 <code>raft.Node</code> 接口由 <a href=https://wiserfz.github.io/posts/etcd-raft/#raft-node><code>raft.node</code></a> 对象实现，因此查看 <code>raft.node.Propose</code> 方法：<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>n </span><span>*</span><span style=color:#b48ead>node</span><span>) </span><span style=color:#8fa1b3>Propose</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>data </span><span>[]</span><span style=color:#b48ead>byte</span><span>) </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>stepWait</span><span>(</span><span style=color:#bf616a>ctx</span><span>, </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>Message</span><span>{</span><span style=color:#bf616a>Type</span><span>: </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgProp</span><span>, </span><span style=color:#bf616a>Entries</span><span>: []</span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>Entry</span><span>{{</span><span style=color:#bf616a>Data</span><span>: </span><span style=color:#bf616a>data</span><span>}}})
+</span><span>}
+</span></code></pre><p><code>raft.node</code> 对象会调用 <code>node.stepWait</code> 方法，并最终调用 <code>node.stepWithWaitOption</code> 方法，由 <a href=https://wiserfz.github.io/posts/etcd-raft/#prop-channel><code>node.propc</code></a> channel 发送。<pre class=language-go data-lang=go style=color:#c0c5ce;background-color:#2b303b><code class=language-go data-lang=go><span style=color:#b48ead>func </span><span>(</span><span style=color:#bf616a>n </span><span>*</span><span style=color:#b48ead>node</span><span>) </span><span style=color:#8fa1b3>stepWithWaitOption</span><span>(</span><span style=color:#bf616a>ctx context</span><span>.</span><span style=color:#b48ead>Context</span><span>, </span><span style=color:#bf616a>m pb</span><span>.</span><span style=color:#b48ead>Message</span><span>, </span><span style=color:#bf616a>wait </span><span style=color:#b48ead>bool</span><span>) </span><span style=color:#b48ead>error </span><span>{
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>m</span><span>.</span><span style=color:#bf616a>Type </span><span>!= </span><span style=color:#bf616a>pb</span><span>.</span><span style=color:#bf616a>MsgProp </span><span>{
+</span><span>		</span><span style=color:#b48ead>select </span><span>{
+</span><span>		</span><span style=color:#b48ead>case </span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>recvc </span><span>&lt;- </span><span style=color:#bf616a>m</span><span>:
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>		</span><span style=color:#b48ead>case </span><span>&lt;-</span><span style=color:#bf616a>ctx</span><span>.</span><span style=color:#bf616a>Done</span><span>():
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ctx</span><span>.</span><span style=color:#bf616a>Err</span><span>()
+</span><span>		</span><span style=color:#b48ead>case </span><span>&lt;-</span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>done</span><span>:
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ErrStopped
+</span><span>		}
+</span><span>	}
+</span><span>	</span><span style=color:#bf616a>ch </span><span>:= </span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>propc
+</span><span>	</span><span style=color:#bf616a>pm </span><span>:= </span><span style=color:#bf616a>msgWithResult</span><span>{</span><span style=color:#bf616a>m</span><span>: </span><span style=color:#bf616a>m</span><span>}
+</span><span>	</span><span style=color:#b48ead>if </span><span style=color:#bf616a>wait </span><span>{
+</span><span>		</span><span style=color:#bf616a>pm</span><span>.</span><span style=color:#bf616a>result </span><span>= </span><span style=color:#96b5b4>make</span><span>(</span><span style=color:#b48ead>chan error</span><span>, </span><span style=color:#d08770>1</span><span>)
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>select </span><span>{
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>ch </span><span>&lt;- </span><span style=color:#bf616a>pm</span><span>:
+</span><span>		</span><span style=color:#b48ead>if </span><span>!</span><span style=color:#bf616a>wait </span><span>{
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>		}
+</span><span>	</span><span style=color:#b48ead>case </span><span>&lt;-</span><span style=color:#bf616a>ctx</span><span>.</span><span style=color:#bf616a>Done</span><span>():
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ctx</span><span>.</span><span style=color:#bf616a>Err</span><span>()
+</span><span>	</span><span style=color:#b48ead>case </span><span>&lt;-</span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>done</span><span>:
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ErrStopped
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>select </span><span>{
+</span><span>	</span><span style=color:#b48ead>case </span><span style=color:#bf616a>err </span><span>:= &lt;-</span><span style=color:#bf616a>pm</span><span>.</span><span style=color:#bf616a>result</span><span>:
+</span><span>		</span><span style=color:#b48ead>if </span><span style=color:#bf616a>err </span><span>!= </span><span style=color:#d08770>nil </span><span>{
+</span><span>			</span><span style=color:#b48ead>return </span><span style=color:#bf616a>err
+</span><span>		}
+</span><span>	</span><span style=color:#b48ead>case </span><span>&lt;-</span><span style=color:#bf616a>ctx</span><span>.</span><span style=color:#bf616a>Done</span><span>():
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ctx</span><span>.</span><span style=color:#bf616a>Err</span><span>()
+</span><span>	</span><span style=color:#b48ead>case </span><span>&lt;-</span><span style=color:#bf616a>n</span><span>.</span><span style=color:#bf616a>done</span><span>:
+</span><span>		</span><span style=color:#b48ead>return </span><span style=color:#bf616a>ErrStopped
+</span><span>	}
+</span><span>	</span><span style=color:#b48ead>return </span><span style=color:#d08770>nil
+</span><span>}
+</span></code></pre><p>在 <code>node.run</code> 方法中，从 <code>propc</code> 中接收到的消息由 <code>raft.Step</code> 方法处理，最终由 <code>stepLeader</code> 函数处理； 当收到 <code>MsgProp</code> 消息后，leader 节点会通过 <code>raft.bcastAppend</code> 方法向 follower 节点发送 <code>MsgApp</code> 消息；当 follower 节点收到 <code>MsgApp</code> 消息后，会通过 <code>raft.handleAppendEntries</code> 方法处理消息，并回复 <code>MsgAppResp</code> 消息。<p>这里就省略了 Leader 收到 <code>MsgAppResp</code> 消息后的处理，具体可以查看 <code>stepLeader</code> 方法中 <a href=https://github.com/etcd-io/etcd/blob/a17edfd59754d1aed29c2db33520ab9d401326a5/raft/raft.go#L1100 rel=noopener target=_blank><code>case pd.MsgAppResp</code></a> 中的逻辑。<h1 id=reference><a aria-label="Anchor link for: reference" class=zola-anchor href=#reference>Reference</a></h1><div class=footnote-definition id=1><sup class=footnote-definition-label>1</sup><p>表示 <a href=https://github.com/etcd-io/etcd/blob/a17edfd59754d1aed29c2db33520ab9d401326a5/raft/raft.go#L680 rel=noopener target=_blank><code>becomeFollower</code></a>，<a href=https://github.com/etcd-io/etcd/blob/a17edfd59754d1aed29c2db33520ab9d401326a5/raft/raft.go#L689 rel=noopener target=_blank><code>becomeCandidate</code></a> 以及 <a href=https://github.com/etcd-io/etcd/blob/a17edfd59754d1aed29c2db33520ab9d401326a5/raft/raft.go#L718 rel=noopener target=_blank><code>becomeLeader</code></a> 方法</div><div class=footnote-definition id=2><sup class=footnote-definition-label>2</sup><p>表示 <a href=https://github.com/etcd-io/etcd/blob/a17edfd59754d1aed29c2db33520ab9d401326a5/raft/raft.go#L985 rel=noopener target=_blank><code>stepLeader</code></a>，<a href=https://github.com/etcd-io/etcd/blob/a17edfd59754d1aed29c2db33520ab9d401326a5/raft/raft.go#L1370 rel=noopener target=_blank><code>stepCandidate</code></a> 以及 <a href=https://github.com/etcd-io/etcd/blob/a17edfd59754d1aed29c2db33520ab9d401326a5/raft/raft.go#L1415 rel=noopener target=_blank><code>stepFollower</code></a> 函数</div></section></article></main></div></div><div class=right-content><div class=toc><div class=heading>Table of Contents</div><ul class=toc-list><li class=parent><a href=https://wiserfz.github.io/posts/etcd-raft/#qian-yan>前言</a><li class=parent><a href=https://wiserfz.github.io/posts/etcd-raft/#etcd-server>etcd server</a><li class=parent><a href=https://wiserfz.github.io/posts/etcd-raft/#raft-node-states>Raft node states</a><li class=parent><a href=https://wiserfz.github.io/posts/etcd-raft/#leader-election>Leader election</a><li class=parent><a href=https://wiserfz.github.io/posts/etcd-raft/#leader-term>Leader term</a> <ul><li><a href=https://wiserfz.github.io/posts/etcd-raft/#heartbeat>Heartbeat</a><li><a href=https://wiserfz.github.io/posts/etcd-raft/#propose>Propose</a></ul><li class=parent><a href=https://wiserfz.github.io/posts/etcd-raft/#reference>Reference</a></ul></div></div>

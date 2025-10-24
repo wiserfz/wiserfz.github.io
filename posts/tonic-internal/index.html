@@ -1,0 +1,239 @@
+<!doctype html><html class="dark light" lang=en><head><meta charset=UTF-8><meta content="IE=edge" http-equiv=X-UA-Compatible><meta content="width=device-width,initial-scale=1.0" name=viewport><meta content=https://wiserfz.github.io name=base><title>
+            
+                tonic internal
+            
+        </title><meta content="tonic internal" property=og:title><meta content="Source code for tonic." property=og:description><meta content="Source code for tonic." name=description><link href=https://wiserfz.github.io/img/favicons/favicon.ico rel=icon type=image/png><link href=https://wiserfz.github.io/fonts.css rel=stylesheet><script defer src=https://wiserfz.github.io/js/codeblock.js></script><script defer src=https://wiserfz.github.io/js/toc.js></script><script>MathJax = {
+                    tex: {
+                        inlineMath: [
+                            ['$', '$'],
+                            ['\\(', '\\)']
+                        ]
+                    }
+                };</script><script async id=MathJax-script src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/atom.xml rel=alternate type=application/atom+xml><link title="
+    wiser's blog
+" href=https://wiserfz.github.io/rss.xml rel=alternate type=application/rss+xml><link href=https://wiserfz.github.io/theme/light.css rel=stylesheet><link href=https://wiserfz.github.io/theme/dark.css id=darkModeStyle rel=stylesheet><script src=https://wiserfz.github.io/js/themetoggle.js></script><script>setTheme(getSavedTheme());</script><link href=https://wiserfz.github.io/main.css media=screen rel=stylesheet><script src="https://wiserfz.github.io/search_index.en.js?h=83f808dfc552363cb1ef" defer></script><script src="https://wiserfz.github.io/js/searchElasticlunr.min.js?h=3626c0ef99daa745b31e" defer></script><body><div class=left-content></div><div class=content><nav><div class=left-nav><a href=https://wiserfz.github.io>wiser's blog</a><div class=socials><a rel="'me" target="'_blank'" class=social href=https://wiserfz.github.io/rss.xml noopener&#x27;> <img alt=rss src=https://wiserfz.github.io/icons/social/rss.svg> </a><a rel="'me" target="'_blank'" class=social href=mailto:wiserfz810@gmail.com noopener&#x27;> <img alt=email src=https://wiserfz.github.io/icons/social/email.svg> </a><a rel="'me" target="'_blank'" class=social href=https://github.com/wiserfz/ noopener&#x27;> <img alt=github src=https://wiserfz.github.io/icons/social/github.svg> </a></div></div><div class=right-nav><a href=https://wiserfz.github.io style=margin-right:.5em>/home</a><a href=https://wiserfz.github.io/posts style=margin-right:.5em>/posts</a><a href=https://wiserfz.github.io/tags style=margin-right:.5em>/tags</a><a href=https://wiserfz.github.io/about style=margin-right:.5em>/about</a><button title="$SHORTCUT to open search" class=search-button id=search-button><img alt=Search class=search-icon src=https://wiserfz.github.io/icons/search.svg></button><div class="search-modal js" aria-labelledby=modalTitle id=searchModal role=dialog><div id=modal-content><h1 class=page-header id=modalTitle>Search</h1><div id=searchBar><input aria-controls=results-container aria-expanded=false autocomplete=off id=searchInput placeholder=Search... role=combobox spellcheck=false><button title="Clear search" class=clear-button id=clear-search><svg viewbox="0 -960 960 960" xmlns=http://www.w3.org/2000/svg><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg></button></div><div id=results-container><div id=results-info><span id=zero_results style=display:none>No results</span><span id=one_result style=display:none>1 result</span><span id=many_results style=display:none>$NUMBER results</span></div><div id=results role=listbox></div></div></div></div><a onclick="toggleTheme(); event.preventDefault();" href=# id=dark-mode-toggle> <img alt=Light id=sun-icon src=https://wiserfz.github.io/icons/sun.svg style=filter:invert()> <img alt=Dark id=moon-icon src=https://wiserfz.github.io/icons/moon.svg> </a><script>updateItemToggleTheme()</script></div></nav><div data-selector="main article p" class=visible-element-observer-root><main><article><div class=title><div class=page-header>tonic internal</div><div class=meta>Posted on <time>2024-09-26</time><span class=tags-label>::</span><span class=tags> <a class=post-tag href=https://wiserfz.github.io/tags/grpc/>gRPC</a> <a class=post-tag href=https://wiserfz.github.io/tags/code/>code</a> </span></div></div><section class=body><h2 id=qian-yan><a aria-label="Anchor link for: qian-yan" class=zola-anchor href=#qian-yan>前言</a></h2><p>公司线上 etcd 集群由于运维同学的不当操作；导致 etcd 集群异常，经过修复后；etcd 集群恢复正常，但是服务没有自动恢复，进而需要分析代码为何服务无法自动恢复。<p>代码中使用了 <a href=https://docs.rs/etcd-client/latest/etcd_client/ rel=noopener target=_blank><code>etcd-client</code></a> 库作为 client 去连接 etcd，该库的底层使用的是 <code>tonic</code> 发起 gRPC 请求 etcd。<p>因此；这篇文章的重点放在 <code>tonic</code> 库的实现，顺便解决上层业务代码的问题。<p>PS: 阅读的 <code>tonic</code> 原码版本为 <code>v0.12.3</code><h2 id=wen-dang><a aria-label="Anchor link for: wen-dang" class=zola-anchor href=#wen-dang>文档</a></h2><p>首先；阅读 rust 代码，第一步也是笔者认为的重要的一步是 <a href=https://docs.rs/tonic/latest/tonic rel=noopener target=_blank><code>tonic</code></a> 文档的阅读，快速了解库中有哪些 <code>modules</code>，<code>macros</code>，<code>struct</code>，<code>enum</code> 以及最重要的 <code>trait</code>。<p>从文档中，可以知道有以下 <code>modules</code><table><thead><tr><th>module<th>description<tbody><tr><td>body<td>HTTP specific body utilities.<tr><td>client<td>Generic client implementation.<tr><td>codec<td>Generic encoding and decoding.<tr><td>metadata<td>Contains data structures and utilities for handling gRPC custom metadata.<tr><td>server<td>Generic server implementation.<tr><td>service<td>Utilities for using Tower services with Tonic.<tr><td>transport<td>Batteries included server and client.</table><p>笔者认为重要的有以下：<ul><li><code>client</code>：高层抽象，gRPC client 的实现<li><code>server</code>：高层抽象，gRPC server 的实现<li><code>service</code>：利用 [tower service trait] 实现的工具<li><code>transport</code>：底层连接抽象，在 server 端以及 client 端都有使用</ul><p><code>trait</code> 实现了以下两个：<table><thead><tr><th>trait<th>description<tbody><tr><td>IntoRequest<td>Trait implemented by RPC request types.<tr><td>IntoStreamingRequest<td>Trait implemented by RPC streaming request types.</table><p>从名称中，就可以知道实现 <code>IntoRequest</code> trait 的对象可以发起 gRPC unary call，而实现 <code>IntoStreamingRequest</code> trait 的对象可以发起 gRPC streaming call。<p><del>其余的 <code>struct</code> 以及 <code>enum</code> ，这里暂时按下不表。</del><h3 id=client><a aria-label="Anchor link for: client" class=zola-anchor href=#client>client</a></h3><p>通过 tonic 给出的 <a href=https://github.com/hyperium/tonic/blob/4b8d2c46aa57e40b1e80077f4f7b7d4679027bb5/examples/src/helloworld/client.rs#L8C1-L21C2 rel=noopener target=_blank>helloword example</a> 分析 client 端是如何实现。<p><code>GreeterClient</code> 是 tonic 利用 <a href=https://docs.rs/prost/latest/prost/ rel=noopener target=_blank>prost</a> 库通过 protobuf 生成的 gRPC client 对象。<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#65737e>/// The greeting service definition.
+</span><span>#[</span><span style=color:#bf616a>derive</span><span>(Debug, Clone)]
+</span><span style=color:#b48ead>pub struct </span><span>GreeterClient&lt;T> {
+</span><span>    </span><span style=color:#bf616a>inner</span><span>: tonic::client::Grpc&lt;T>,
+</span><span>}
+</span><span style=color:#b48ead>impl </span><span>GreeterClient&lt;tonic::transport::Channel> {
+</span><span>    </span><span style=color:#65737e>/// Attempt to create a new client by connecting to a given endpoint.
+</span><span>    </span><span style=color:#b48ead>pub</span><span> async </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>connect</span><span>&lt;D>(</span><span style=color:#bf616a>dst</span><span>: D) -> Result&lt;</span><span style=color:#b48ead>Self</span><span>, tonic::transport::Error>
+</span><span>    </span><span style=color:#b48ead>where
+</span><span>        D: TryInto&lt;tonic::transport::Endpoint>,
+</span><span>        </span><span style=color:#b48ead>D::</span><span>Error: Into&lt;StdError>,
+</span><span>    {
+</span><span>        </span><span style=color:#b48ead>let</span><span> conn = tonic::transport::Endpoint::new(dst)?.</span><span style=color:#96b5b4>connect</span><span>().await?;
+</span><span>        Ok(</span><span style=color:#b48ead>Self</span><span>::new(conn))
+</span><span>    }
+</span><span>}
+</span></code></pre><p><code>GreeterClient</code> 就是 <code>tonic::client::Grpc&lt;T></code> 的封装，通过 <code>connect</code> 方法创建，<code>connect</code> 方法接收一个参数 <code>D: TryInto&lt;tonic::transport::Endpoint></code>，传入 <code>Endpoint::new</code> 方法，返回一个 <code>Endpoint</code> 对象，这个对象就是 gRPC server 端地址的封装；然后通过 <code>Endpoint::connect</code> 方法创建一个 <code>tonic::transport::Channel</code> 对象。这个方法设置了 HTTP 连接的参数，然后传入 <code>Channel::connect</code> 方法创建 <code>tonic::transport::Channel</code> 对象。<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>pub</span><span>(</span><span style=color:#b48ead>crate</span><span>) async </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>connect</span><span>&lt;C>(</span><span style=color:#bf616a>connector</span><span>: C, </span><span style=color:#bf616a>endpoint</span><span>: Endpoint) -> Result&lt;</span><span style=color:#b48ead>Self</span><span>, super::Error>
+</span><span style=color:#b48ead>where
+</span><span>    C: Service&lt;Uri> + Send + </span><span style=color:#b48ead>'static</span><span>,
+</span><span>    </span><span style=color:#b48ead>C::</span><span>Error: Into&lt;crate::Error> + Send,
+</span><span>    </span><span style=color:#b48ead>C::</span><span>Future: Unpin + Send,
+</span><span>    </span><span style=color:#b48ead>C::</span><span>Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + </span><span style=color:#b48ead>'static</span><span>,
+</span><span>{
+</span><span>    </span><span style=color:#65737e>// buffer_size 是可以异步发送的请求数，默认 1024 个
+</span><span>    </span><span style=color:#b48ead>let</span><span> buffer_size = endpoint.buffer_size.</span><span style=color:#96b5b4>unwrap_or</span><span>(</span><span style=color:#d08770>DEFAULT_BUFFER_SIZE</span><span>);
+</span><span>    </span><span style=color:#65737e>// executor 默认是 tokio，在 endpoint 初始化中设置
+</span><span>    </span><span style=color:#b48ead>let</span><span> executor = endpoint.executor.</span><span style=color:#96b5b4>clone</span><span>();
+</span><span>
+</span><span>    </span><span style=color:#65737e>// 创建 HTTP 连接
+</span><span>    </span><span style=color:#b48ead>let</span><span> svc = Connection::connect(connector, endpoint)
+</span><span>        .await
+</span><span>        .</span><span style=color:#96b5b4>map_err</span><span>(</span><span style=color:#b48ead>super</span><span>::Error::from_source)?;
+</span><span>    </span><span style=color:#b48ead>let </span><span>(svc, worker) = Buffer::pair(Either::A(svc), buffer_size);
+</span><span>    executor.</span><span style=color:#96b5b4>execute</span><span>(worker);
+</span><span>
+</span><span>    Ok(Channel { svc })
+</span><span>}
+</span></code></pre><p>从这里开始就进入了 tonic 库的底层设计，<code>tower::buffer::Buffer::pair</code> 其实是 <code>tokio::mpsc::unbounded_channel</code> 方法的封装，最终的效果就是发送端被 <code>tonic::transport::Channel</code> 所拥有，而接收端被上述的 <code>worker(tower::buffer::worker::Worker)</code> 变量拥有；<strong>利用 <code>tower::buffer::Buffer</code> 把底层连接和上层 client 做区分，这样对于使用者来说，就可以在多个 task 中使用 client 发送 gRPC 请求了。</strong><pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>impl</span><span>&lt;T, Request> Future </span><span style=color:#b48ead>for </span><span>Worker&lt;T, Request>
+</span><span style=color:#b48ead>where
+</span><span>    T: Service&lt;Request>,
+</span><span>    </span><span style=color:#b48ead>T::</span><span>Error: Into&lt;crate::BoxError>,
+</span><span>{
+</span><span>    </span><span style=color:#b48ead>type </span><span>Output = ();
+</span><span>
+</span><span>    </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>poll</span><span>(</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>: Pin&lt;&</span><span style=color:#b48ead>mut Self</span><span>>, </span><span style=color:#bf616a>cx</span><span>: &</span><span style=color:#b48ead>mut </span><span>Context&lt;'_>) -> Poll&lt;</span><span style=color:#b48ead>Self::</span><span>Output> {
+</span><span>        </span><span style=color:#b48ead>if </span><span style=color:#bf616a>self</span><span>.finish {
+</span><span>            </span><span style=color:#b48ead>return </span><span>Poll::Ready(());
+</span><span>        }
+</span><span>
+</span><span>        </span><span style=color:#b48ead>loop </span><span>{
+</span><span>            </span><span style=color:#65737e>// 从 rx 中获取请求
+</span><span>            </span><span style=color:#b48ead>match </span><span>ready!(</span><span style=color:#bf616a>self</span><span>.</span><span style=color:#96b5b4>poll_next_msg</span><span>(cx)) {
+</span><span>                Some((msg, first)) => {
+</span><span>                    </span><span style=color:#b48ead>let</span><span> _guard = msg.span.</span><span style=color:#96b5b4>enter</span><span>();
+</span><span>                    </span><span style=color:#b48ead>if let </span><span>Some(</span><span style=color:#b48ead>ref</span><span> failed) = </span><span style=color:#bf616a>self</span><span>.failed {
+</span><span>                        </span><span style=color:#b48ead>let </span><span>_ = msg.tx.</span><span style=color:#96b5b4>send</span><span>(Err(failed.</span><span style=color:#96b5b4>clone</span><span>()));
+</span><span>                        </span><span style=color:#b48ead>continue</span><span>;
+</span><span>                    }
+</span><span>
+</span><span>                    </span><span style=color:#65737e>// ...
+</span><span>
+</span><span>                    </span><span style=color:#65737e>// 利用 service trait 中 poll_ready 判断底层连接是否正常，是否可以发送数据
+</span><span>                    </span><span style=color:#b48ead>match </span><span style=color:#bf616a>self</span><span>.service.</span><span style=color:#96b5b4>poll_ready</span><span>(cx) {
+</span><span>                        Poll::Ready(Ok(())) => {
+</span><span>                            </span><span style=color:#65737e>// 利用 service trait 中 call 发送请求
+</span><span>                            </span><span style=color:#b48ead>let</span><span> response = </span><span style=color:#bf616a>self</span><span>.service.</span><span style=color:#96b5b4>call</span><span>(msg.request);
+</span><span>
+</span><span>                            </span><span style=color:#65737e>// 返回响应给请求方
+</span><span>                            </span><span style=color:#b48ead>let </span><span>_ = msg.tx.</span><span style=color:#96b5b4>send</span><span>(Ok(response));
+</span><span>                        }
+</span><span>                        </span><span style=color:#65737e>// 如果底层连接返回 pending，则返回 pending
+</span><span>                        Poll::Pending => {
+</span><span>                            </span><span style=color:#65737e>// Put out current message back in its slot.
+</span><span>                            </span><span style=color:#96b5b4>drop</span><span>(_guard);
+</span><span>                            </span><span style=color:#bf616a>self</span><span>.current_message = Some(msg);
+</span><span>                            </span><span style=color:#b48ead>return </span><span>Poll::Pending;
+</span><span>                        }
+</span><span>                        </span><span style=color:#65737e>// 如果底层连接异常，则返回异常，并关闭 channel
+</span><span>                        Poll::Ready(Err(e)) => {
+</span><span>                            </span><span style=color:#b48ead>let</span><span> error = e.</span><span style=color:#96b5b4>into</span><span>();
+</span><span>                            </span><span style=color:#96b5b4>drop</span><span>(_guard);
+</span><span>                            </span><span style=color:#bf616a>self</span><span>.</span><span style=color:#96b5b4>failed</span><span>(error);
+</span><span>                            </span><span style=color:#b48ead>let </span><span>_ = msg.tx.</span><span style=color:#96b5b4>send</span><span>(Err(</span><span style=color:#bf616a>self
+</span><span>                                .failed
+</span><span>                                .</span><span style=color:#96b5b4>as_ref</span><span>()
+</span><span>                                .</span><span style=color:#96b5b4>expect</span><span>("</span><span style=color:#a3be8c>Worker::failed did not set self.failed?</span><span>")
+</span><span>                                .</span><span style=color:#96b5b4>clone</span><span>()));
+</span><span>                            </span><span style=color:#65737e>// Wake any tasks waiting on channel capacity.
+</span><span>                            </span><span style=color:#bf616a>self</span><span>.</span><span style=color:#96b5b4>close_semaphore</span><span>();
+</span><span>                        }
+</span><span>                    }
+</span><span>                }
+</span><span>                None => {
+</span><span>                    </span><span style=color:#65737e>// No more more requests _ever_.
+</span><span>                    </span><span style=color:#bf616a>self</span><span>.finish = </span><span style=color:#d08770>true</span><span>;
+</span><span>                    </span><span style=color:#b48ead>return </span><span>Poll::Ready(());
+</span><span>                }
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre><p>获取到 <code>tonic::transport::Channel</code> 后就被封装到 <code>tonic::client::Grpc</code> 中，最后生成 <code>GreeterClient</code> 返回给调用者。<h3 id=send-grpc-unary-request><a aria-label="Anchor link for: send-grpc-unary-request" class=zola-anchor href=#send-grpc-unary-request>send gRPC unary request</a></h3><p>调用 <code>client.say_hello(request)</code> 方法，就发送了一个 gRPC unary request，会被上述的 <code>worker(tower::buffer::worker::Worker)</code> 对象接收，该对象实现 <code>Future</code> trait，通过 <code>Connection</code> 对象实现的 <code>tower::Service</code> trait 发送请求给 gRPC server。<p>到这里，利用 gRPC client 发送请求的流程就结束了，但是在 <code>etcd-client</code> 库中使用的并不是简单的 unary call API，而是 streaming call，因此需要看 <code>etcd-client</code> 库是如何使用 <code>tonic</code> 的。<h3 id=balance-channel><a aria-label="Anchor link for: balance-channel" class=zola-anchor href=#balance-channel>balance channel</a></h3><p>从上述分析 client 发送 gRPC unary request 过程中，可以发现 <code>tonic::transport::Channel</code> 是向底层连接发送请求的唯一通道，那么如果有多个 endpoint，又该如何处理？balance 的策略又是如何？<p>如果需要我们自己实现，大概逻辑如下：<ol><li>通过多个 endpoint 创建多个 client，并封装一个对象进行管理<li>实现 load balance 策略，发送请求时，pick 一个 client 发送请求<li>实现动态管理 endpoint 即 client 的逻辑</ol><p>但是，<code>tonic</code> 其实通过 <code>tonic::transport::Channel::balance_channel</code> 方法优雅地实现了上述逻辑。<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#65737e>/// Balance a list of [`Endpoint`]'s.
+</span><span style=color:#65737e>///
+</span><span style=color:#65737e>/// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
+</span><span style=color:#b48ead>pub fn </span><span style=color:#8fa1b3>balance_channel</span><span>&lt;K>(</span><span style=color:#bf616a>capacity</span><span>: </span><span style=color:#b48ead>usize</span><span>) -> (</span><span style=color:#b48ead>Self</span><span>, Sender&lt;Change&lt;K, Endpoint>>)
+</span><span style=color:#b48ead>where
+</span><span>    K: Hash + Eq + Send + Clone + </span><span style=color:#b48ead>'static</span><span>,
+</span><span>{
+</span><span>    </span><span style=color:#b48ead>Self</span><span>::balance_channel_with_executor(capacity, SharedExec::tokio())
+</span><span>}
+</span><span>
+</span><span style=color:#65737e>/// Balance a list of [`Endpoint`]'s.
+</span><span style=color:#65737e>///
+</span><span style=color:#65737e>/// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
+</span><span style=color:#65737e>///
+</span><span style=color:#65737e>/// The [`Channel`] will use the given executor to spawn async tasks.
+</span><span style=color:#b48ead>pub fn </span><span style=color:#8fa1b3>balance_channel_with_executor</span><span>&lt;K, E>(
+</span><span>    </span><span style=color:#bf616a>capacity</span><span>: </span><span style=color:#b48ead>usize</span><span>,
+</span><span>    </span><span style=color:#bf616a>executor</span><span>: E,
+</span><span>) -> (</span><span style=color:#b48ead>Self</span><span>, Sender&lt;Change&lt;K, Endpoint>>)
+</span><span style=color:#b48ead>where
+</span><span>    K: Hash + Eq + Send + Clone + </span><span style=color:#b48ead>'static</span><span>,
+</span><span>    E: Executor&lt;Pin&lt;Box&lt;dyn Future&lt;Output = ()> + Send>>> + Send + Sync + </span><span style=color:#b48ead>'static</span><span>,
+</span><span>{
+</span><span>    </span><span style=color:#b48ead>let </span><span>(tx, rx) = </span><span style=color:#96b5b4>channel</span><span>(capacity);
+</span><span>    </span><span style=color:#65737e>// 创建 discover 对象，用于管理底层 endpoint
+</span><span>    </span><span style=color:#b48ead>let</span><span> list = DynamicServiceStream::new(rx);
+</span><span>    (</span><span style=color:#b48ead>Self</span><span>::balance(list, </span><span style=color:#d08770>DEFAULT_BUFFER_SIZE</span><span>, executor), tx)
+</span><span>}
+</span><span>
+</span><span style=color:#b48ead>pub</span><span>(</span><span style=color:#b48ead>crate</span><span>) </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>balance</span><span>&lt;D, E>(</span><span style=color:#bf616a>discover</span><span>: D, </span><span style=color:#bf616a>buffer_size</span><span>: </span><span style=color:#b48ead>usize</span><span>, </span><span style=color:#bf616a>executor</span><span>: E) -> </span><span style=color:#b48ead>Self
+</span><span style=color:#b48ead>where
+</span><span>    D: Discover&lt;Service = Connection> + Unpin + Send + </span><span style=color:#b48ead>'static</span><span>,
+</span><span>    </span><span style=color:#b48ead>D::</span><span>Error: Into&lt;crate::Error>,
+</span><span>    </span><span style=color:#b48ead>D::</span><span>Key: Hash + Send + Clone,
+</span><span>    E: Executor&lt;BoxFuture&lt;</span><span style=color:#b48ead>'static</span><span>, ()>> + Send + Sync + </span><span style=color:#b48ead>'static</span><span>,
+</span><span>{
+</span><span>    </span><span style=color:#b48ead>let</span><span> svc = Balance::new(discover);
+</span><span>
+</span><span>    </span><span style=color:#b48ead>let</span><span> svc = BoxService::new(svc);
+</span><span>    </span><span style=color:#b48ead>let </span><span>(svc, worker) = Buffer::pair(Either::B(svc), buffer_size);
+</span><span>    executor.</span><span style=color:#96b5b4>execute</span><span>(Box::pin(worker));
+</span><span>
+</span><span>    Channel { svc }
+</span><span>}
+</span></code></pre><p>从上面的代码中，可以清晰的看到 <code>tonic::transport::Channel::balance_channel</code> 除了返回 <code>tonic::transport::Channel</code> 还多返回一个 <code>tokio::mpsc::Sender&lt;Change&lt;K, Endpoint>></code>，并且从 <code>Sender</code> 的发送数据中，就可以得出这个 <code>Sender</code> 是动态管理 endpoint 的 handle。<p><img alt="Balance Channel" src=/img/client-of-grpc-in-rust/balance_channel.png><p>上图是通过 <code>balance_channel</code> 方法返回的 <code>tonic::transport::Channel</code> 封装，可以看到有很多层，重要的有以下：<ul><li><code>tonic::transport::channel::service::discover::DynamicServiceStream</code>：动态更新 endpoint<li><code>tower::balance::p2c::service::Balance</code>：<a href=https://docs.rs/tower/latest/tower/balance/p2c/index.html rel=noopener target=_blank>p2c</a> balance 策略<li><code>tower::reconnect::Reconnect</code>：重连策略</ul><p><strong><code>DynamicServiceStream</code></strong><pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>pub</span><span>(</span><span style=color:#b48ead>crate</span><span>) </span><span style=color:#b48ead>struct </span><span>DynamicServiceStream&lt;K: Hash + Eq + Clone> {
+</span><span>    </span><span style=color:#bf616a>changes</span><span>: Receiver&lt;Change&lt;K, Endpoint>>,
+</span><span>}
+</span><span>
+</span><span style=color:#b48ead>impl</span><span>&lt;K: Hash + Eq + Clone> Stream </span><span style=color:#b48ead>for </span><span>DynamicServiceStream&lt;K> {
+</span><span>    </span><span style=color:#b48ead>type </span><span>Item = DiscoverResult&lt;K, Connection, crate::Error>;
+</span><span>
+</span><span>    </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>poll_next</span><span>(</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>: Pin&lt;&</span><span style=color:#b48ead>mut Self</span><span>>, </span><span style=color:#bf616a>cx</span><span>: &</span><span style=color:#b48ead>mut </span><span>Context&lt;'_>) -> Poll&lt;Option&lt;</span><span style=color:#b48ead>Self::</span><span>Item>> {
+</span><span>        </span><span style=color:#b48ead>let</span><span> c = &</span><span style=color:#b48ead>mut </span><span style=color:#bf616a>self</span><span>.changes;
+</span><span>        </span><span style=color:#b48ead>match </span><span>Pin::new(&</span><span style=color:#b48ead>mut </span><span>*c).</span><span style=color:#96b5b4>poll_recv</span><span>(cx) {
+</span><span>            Poll::Pending | Poll::Ready(None) => Poll::Pending,
+</span><span>            Poll::Ready(Some(change)) => </span><span style=color:#b48ead>match</span><span> change {
+</span><span>                Change::Insert(k, endpoint) => {
+</span><span>                    </span><span style=color:#b48ead>let mut</span><span> http = HttpConnector::new();
+</span><span>                    http.</span><span style=color:#96b5b4>set_nodelay</span><span>(endpoint.tcp_nodelay);
+</span><span>                    http.</span><span style=color:#96b5b4>set_keepalive</span><span>(endpoint.tcp_keepalive);
+</span><span>                    http.</span><span style=color:#96b5b4>set_connect_timeout</span><span>(endpoint.connect_timeout);
+</span><span>                    http.</span><span style=color:#96b5b4>enforce_http</span><span>(</span><span style=color:#d08770>false</span><span>);
+</span><span>
+</span><span>                    </span><span style=color:#b48ead>let</span><span> connection = Connection::lazy(endpoint.</span><span style=color:#96b5b4>connector</span><span>(http), endpoint);
+</span><span>                    </span><span style=color:#b48ead>let</span><span> change = Ok(Change::Insert(k, connection));
+</span><span>                    Poll::Ready(Some(change))
+</span><span>                }
+</span><span>                Change::Remove(k) => Poll::Ready(Some(Ok(Change::Remove(k)))),
+</span><span>            },
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre><p><code>DynamicServiceStream</code> 很简单，除了一个 <code>DynamicServiceStream::new</code> 方法外就没有其他方法了，但是它实现了 <code>Stream</code> trait 并且 <code>Item</code> 是 <code>Result</code>。而在 <a href=https://github.com/tower-rs/tower/blob/tower-0.4.13/tower/src/discover/mod.rs rel=noopener target=_blank><code>tower::discover</code></a> module 中有如下实现：<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>impl</span><span>&lt;K, S, E, D: </span><span style=color:#2b303b;background-color:#bf616a>?</span><span>Sized> Discover for D
+</span><span style=color:#b48ead>where
+</span><span>    D: TryStream&lt;Ok = Change&lt;K, S>, Error = E>,
+</span><span>    K: Eq,
+</span><span>{
+</span><span>    </span><span style=color:#b48ead>type </span><span>Key = K;
+</span><span>    </span><span style=color:#b48ead>type </span><span>Service = S;
+</span><span>    </span><span style=color:#b48ead>type </span><span>Error = E;
+</span><span>
+</span><span>    </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>poll_discover</span><span>(
+</span><span>        </span><span style=color:#bf616a>self</span><span>: Pin&lt;&</span><span style=color:#b48ead>mut Self</span><span>>,
+</span><span>        </span><span style=color:#bf616a>cx</span><span>: &</span><span style=color:#b48ead>mut </span><span>Context&lt;'_>,
+</span><span>    ) -> Poll&lt;Option&lt;Result&lt;</span><span style=color:#b48ead>D::</span><span>Ok, </span><span style=color:#b48ead>D::</span><span>Error>>> {
+</span><span>        TryStream::try_poll_next(</span><span style=color:#bf616a>self</span><span>, cx)
+</span><span>    }
+</span><span>}
+</span></code></pre><p>即只要实现 <code>TryStream</code> trait 的对象就自动实现 <code>tower::discover::Discover</code> trait，而在 <code>TryStream</code> trait 定义的文件中又有如下实现：<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>impl</span><span>&lt;S, T, E> TryStream </span><span style=color:#b48ead>for </span><span>S
+</span><span style=color:#b48ead>where
+</span><span>    S: ?Sized + Stream&lt;Item = Result&lt;T, E>>,
+</span><span>{
+</span><span>    </span><span style=color:#b48ead>type </span><span>Ok = T;
+</span><span>    </span><span style=color:#b48ead>type </span><span>Error = E;
+</span><span>
+</span><span>    </span><span style=color:#b48ead>fn </span><span style=color:#8fa1b3>try_poll_next</span><span>(
+</span><span>        </span><span style=color:#bf616a>self</span><span>: Pin&lt;&</span><span style=color:#b48ead>mut Self</span><span>>,
+</span><span>        </span><span style=color:#bf616a>cx</span><span>: &</span><span style=color:#b48ead>mut </span><span>Context&lt;'_>,
+</span><span>    ) -> Poll&lt;Option&lt;Result&lt;</span><span style=color:#b48ead>Self::</span><span>Ok, </span><span style=color:#b48ead>Self::</span><span>Error>>> {
+</span><span>        </span><span style=color:#bf616a>self</span><span>.</span><span style=color:#96b5b4>poll_next</span><span>(cx)
+</span><span>    }
+</span><span>}
+</span></code></pre><p>这样，<strong><code>DynamicServiceStream</code> 就实现了 <code>Discover</code> trait。</strong><p><strong><code>Balance</code></strong><p><code>Balance</code> 对象的初始化如下，<code>discover</code> 参数就是上面的 <code>DynamicServiceStream</code><pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#b48ead>impl</span><span>&lt;D, Req> Balance&lt;D, Req>
+</span><span style=color:#b48ead>where
+</span><span>    D: Discover,
+</span><span>    </span><span style=color:#b48ead>D::</span><span>Key: Hash,
+</span><span>    </span><span style=color:#b48ead>D::</span><span>Service: Service&lt;Req>,
+</span><span>    &lt;</span><span style=color:#b48ead>D::</span><span>Service as Service&lt;Req>>::Error: Into&lt;crate::BoxError>,
+</span><span>{
+</span><span>    </span><span style=color:#65737e>/// Constructs a load balancer that uses operating system entropy.
+</span><span>    </span><span style=color:#b48ead>pub fn </span><span style=color:#8fa1b3>new</span><span>(</span><span style=color:#bf616a>discover</span><span>: D) -> </span><span style=color:#b48ead>Self </span><span>{
+</span><span>        </span><span style=color:#b48ead>Self</span><span>::from_rng(discover, &</span><span style=color:#b48ead>mut </span><span>rand::thread_rng()).</span><span style=color:#96b5b4>expect</span><span>("</span><span style=color:#a3be8c>ThreadRNG must be valid</span><span>")
+</span><span>    }
+</span><span>}
+</span></code></pre><p>在这个 <code>Balance</code> 对象中，可以根据 <code>p2c</code> 策略 pick 一个连接发送请求，也可以动态的增删连接；这里的逻辑是在 <code>tower</code> 库中实现，可以另开一篇文章解析，暂时就不细说了。<p><strong><code>Reconnect</code></strong><p><code>Reconnect</code> layer 也是 <code>tower</code> 库中的实现逻辑，这里要着重说明的是，<strong>当使用 <code>tower::Service</code> trait 的 <code>poll_ready</code> 方法时，如果连接建立失败，也是会返回 <code>Poll::Ready(Ok(()))</code> 的。</strong><h4 id=zong-jie><a aria-label="Anchor link for: zong-jie" class=zola-anchor href=#zong-jie>总结</a></h4><p>通过 <code>balance_channel</code> 方法建立 client 后，可以得到 <code>tonic::transport::Channel</code> 和 <code>tokio::mpsc::Sender</code>，通过 <code>tower::transport::Channel</code> 封装的 client 可以发送 gRPC 请求，而 <code>tokio::mpsc::Sender</code> 可以通过发送 <code>Change</code> 实现动态管理底层 endpoint。<pre class=language-rs data-lang=rs style=color:#c0c5ce;background-color:#2b303b><code class=language-rs data-lang=rs><span style=color:#65737e>/// A change in the service set.
+</span><span>#[</span><span style=color:#bf616a>derive</span><span>(Debug)]
+</span><span style=color:#b48ead>pub enum </span><span>Change&lt;K, V> {
+</span><span>    </span><span style=color:#65737e>/// A new service identified by key `K` was identified.
+</span><span>    Insert(K, V),
+</span><span>    </span><span style=color:#65737e>/// The service identified by key `K` disappeared.
+</span><span>    Remove(K),
+</span><span>}
+</span></code></pre></section></article></main></div></div><div class=right-content><div class=toc><div class=heading>Table of Contents</div><ul class=toc-list><li class=parent><a href=https://wiserfz.github.io/posts/tonic-internal/#qian-yan>前言</a><li class=parent><a href=https://wiserfz.github.io/posts/tonic-internal/#wen-dang>文档</a> <ul><li><a href=https://wiserfz.github.io/posts/tonic-internal/#client>client</a><li><a href=https://wiserfz.github.io/posts/tonic-internal/#send-grpc-unary-request>send gRPC unary request</a><li><a href=https://wiserfz.github.io/posts/tonic-internal/#balance-channel>balance channel</a></li><ul><li><a href=https://wiserfz.github.io/posts/tonic-internal/#zong-jie>总结</a></ul></ul></ul></div></div>
